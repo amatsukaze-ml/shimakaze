@@ -1,0 +1,9 @@
+[submodule "incl/cocos-headers"]
+	path = incl/cocos-headers
+	url = https://github.com/smjsgaming/cocos-headers
+[submodule "incl/gd.h"]
+	path = incl/gd.h
+	url = https://github.com/HJfod/gd.h
+[submodule "incl/minhook"]
+	path = incl/minhook
+	url = https://github.com/TsudaKageyu/minhook

@@ -1,0 +1,24 @@
+### Shimakaze .gitignore
+build/
+incl/v8/
+
+# IDE Folders (no.)
+.idea/
+.vscode/
+
+# Compiled object files
+*.obj
+*.o
+*.slo
+*.lo
+
+# Compiled static libraries
+*.lib
+*.a
+*.la
+*.lai
+
+# Compiled dynamic Libraries
+*.so
+*.dylib
+*.dll
