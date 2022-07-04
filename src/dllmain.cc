@@ -1,14 +1,21 @@
 #include "pch.h"
 
 #include "core/core.h"
+#include "hooks/menu_layer.h"
 #include "hooks/cocos/scheduler_hook.h"
 
 DWORD WINAPI main_thread(void *hModule)
 {
+    shimakaze::console::info("Shimakaze", std::format("Starting Shimakaze v{}", SHIMAKAZE_VERSION).c_str());
+    shimakaze::console::info("Shimakaze", "Running for Geometry Dash 2.1");
+    shimakaze::console::info("Shimakaze", std::format("Engine: v8 {}", v8::V8::GetVersion()).c_str());
+
     // initialize minhook
     MH_Initialize();
+    shimakaze::console::info("Shimakaze", "Initializing Main Hooks");
 
     // create our main core hooks
+    SHIMAKAZE_GD_HOOK(0x1907B0, MenuLayer_init);
     SHIMAKAZE_COCOS_HOOK("?update@CCScheduler@cocos2d@@UAEXM@Z", CCScheduler_update);
 
     // start the shimakaze core
