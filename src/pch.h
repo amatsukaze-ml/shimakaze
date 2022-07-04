@@ -39,7 +39,7 @@ inline std::string replace_all(std::string str, const std::string &from, const s
 
 /// CONFIG SECTION
 
-#define SHIMAKAZE_VERSION "1.0.0-RC.1"
+#define SHIMAKAZE_VERSION "0.1.0-RC.1"
 
 #define SHIMAKAZE_DEFAULT_CONFIG                       \
     toml::table                                        \
