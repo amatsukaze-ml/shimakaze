@@ -32,6 +32,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     incl/minhook/include
     incl/gd.h/include
     incl/gd.h
+    incl/tomlplusplus/
 )
 
 # Handle the v8 library.
