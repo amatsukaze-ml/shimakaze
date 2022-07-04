@@ -1,7 +1,7 @@
 #pragma once
 
-#pragma warning( push )
-#pragma warning( disable : 4251 )
+#pragma warning(push)
+#pragma warning(disable : 4251)
 
 #define WIN32_LEAN_AND_MEAN
 
@@ -11,42 +11,95 @@
 #include <cocos2d.h>
 #include <MinHook.h>
 #include <gd.h>
+#include <toml.hpp>
+
+#include "util/console.h"
 
 USING_NS_CC;
 
-namespace gd {
+namespace gd
+{
     inline auto cocos_base = GetModuleHandleA("libcocos2d.dll");
 }
 
-#pragma warning( pop )
+#pragma warning(pop)
 
+// UTILITY FUNCTIONS
 
-#define SHIMAKAZE_HOOK(name, type, ret) \
-    inline ret (__thiscall* name)(type self); \
-    ret __fastcall name##_H(type self, void*)
+inline std::string replace_all(std::string str, const std::string &from, const std::string &to)
+{
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos)
+    {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+    }
+    return str;
+}
 
-#define SHIMAKAZE_HOOK_ARGS(name, type, ret, ...) \
-    inline ret (__thiscall* name)(type self, __VA_ARGS__); \
-    ret __fastcall name##_H(type self, void*, __VA_ARGS__)
+/// CONFIG SECTION
+
+#define SHIMAKAZE_VERSION "1.0.0-RC.1"
+
+#define SHIMAKAZE_DEFAULT_CONFIG                       \
+    toml::table                                        \
+    {                                                  \
+        {                                              \
+            "main", toml::table                        \
+            {                                          \
+                {"auto_update", false},                \
+                    {"show_debug", true},              \
+                {                                      \
+                    "use_experimental_features", false \
+                }                                      \
+            }                                          \
+        }                                              \
+    }
+
+/// HOOKS SECTION
+
+#define SHIMAKAZE_HOOK(name, type, ret)      \
+    inline ret(__thiscall *name)(type self); \
+    ret __fastcall name##_H(type self, void *)
+
+#define SHIMAKAZE_HOOK_ARGS(name, type, ret, ...)         \
+    inline ret(__thiscall *name)(type self, __VA_ARGS__); \
+    ret __fastcall name##_H(type self, void *, __VA_ARGS__)
 
 #define SHIMAKAZE_CALL(name, type, ret) \
-    ret __fastcall name##_H(type self, void*)
+    ret __fastcall name##_H(type self, void *)
 
 #define SHIMAKAZE_CALL_ARGS(name, type, ret, ...) \
-    ret __fastcall name##_H(type self, void*, __VA_ARGS__)
+    ret __fastcall name##_H(type self, void *, __VA_ARGS__)
 
-#define SHIMAKAZE_GD_HOOK(address, name) \
-    MH_CreateHook( \
-        reinterpret_cast<LPVOID>(gd::base + address), \
-        reinterpret_cast<LPVOID>(&name##_H), \
-        reinterpret_cast<LPVOID*>(&name) \
-    ); \
-    MH_EnableHook(reinterpret_cast<LPVOID>(gd::base + address))
-    
-#define SHIMAKAZE_COCOS_HOOK(symbol, name) \
-    MH_CreateHook( \
-        reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol)), \
-        reinterpret_cast<LPVOID>(&name##_H), \
-        reinterpret_cast<LPVOID*>(&name) \
-    ); \
-    MH_EnableHook(reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol)))
+#define SHIMAKAZE_GD_HOOK(address, name)                         \
+    MH_CreateHook(                                               \
+        reinterpret_cast<LPVOID>(gd::base + address),            \
+        reinterpret_cast<LPVOID>(&name##_H),                     \
+        reinterpret_cast<LPVOID *>(&name));                      \
+    MH_EnableHook(reinterpret_cast<LPVOID>(gd::base + address)); \
+    shimakaze::console::info("Shimakaze", std::format("Added a Geometry Dash hook on {} created by Shimakaze", replace_all(std::string(#name), std::string("_"), std::string("::"))).c_str())
+
+#define SHIMAKAZE_COCOS_HOOK(symbol, name)                                           \
+    MH_CreateHook(                                                                   \
+        reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol)),            \
+        reinterpret_cast<LPVOID>(&name##_H),                                         \
+        reinterpret_cast<LPVOID *>(&name));                                          \
+    MH_EnableHook(reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol))); \
+    shimakaze::console::info("Shimakaze", std::format("Added a cocos2d hook on {} created by Shimakaze", replace_all(std::string(#name), std::string("_"), std::string("::"))).c_str())
+
+#define SHIMAKAZE_GD_HOOK_FROM(address, name, from)              \
+    MH_CreateHook(                                               \
+        reinterpret_cast<LPVOID>(gd::base + address),            \
+        reinterpret_cast<LPVOID>(&name##_H),                     \
+        reinterpret_cast<LPVOID *>(&name));                      \
+    MH_EnableHook(reinterpret_cast<LPVOID>(gd::base + address)); \
+    shimakaze::console::info("Shimakaze", std::format("Added a Geometry Dash hook on {} created by {}", replace_all(std::string(#name), std::string("_"), std::string("::")), #from).c_str())
+
+#define SHIMAKAZE_COCOS_HOOK_FROM(symbol, name, from)                                \
+    MH_CreateHook(                                                                   \
+        reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol)),            \
+        reinterpret_cast<LPVOID>(&name##_H),                                         \
+        reinterpret_cast<LPVOID *>(&name));                                          \
+    MH_EnableHook(reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol))); \
+    shimakaze::console::info("Shimakaze", std::format("Added a cocos2d hook on {} created by {}", replace_all(std::string(#name), std::string("_"), std::string("::")), #from).c_str())
