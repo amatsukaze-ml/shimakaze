@@ -4,6 +4,8 @@ namespace shimakaze {
     namespace core {
         void start();
         void run_main_context(v8::Local<v8::Context> context);
+        void assert_shimakaze_directory();
+        
         v8::Local<v8::ObjectTemplate> create_global_object(v8::Isolate *isolate);
         v8::Local<v8::Context> create_main_context(v8::Isolate *isolate);
 
