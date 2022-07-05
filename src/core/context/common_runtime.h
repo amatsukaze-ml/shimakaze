@@ -2,7 +2,6 @@
 
 #include "../core.h"
 #include "../handler.h"
-#include "../v8/module.h"
 
 namespace shimakaze
 {
