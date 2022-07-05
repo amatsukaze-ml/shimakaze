@@ -1,13 +1,24 @@
 #include "core.h"
+#include "handler.h"
 
 #include "v8/module.h"
+
 #include "context/process_object.h"
+#include "context/common_runtime.h"
+
 #include "../hooks/cocos/scheduler_hook.h"
 
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
 #include <format>
+#include <thread>
+
+const auto base_path = std::filesystem::current_path();
+const auto shimakaze_path = base_path / "shimakaze";
+const auto shimakaze_mods_path = shimakaze_path / "mods";
+const auto shimakaze_config_path = shimakaze_path / "shimakaze.toml";
 
 namespace shimakaze
 {
@@ -39,18 +50,135 @@ namespace shimakaze
             // retain the livelihood of the pointer and release it
             g_platform = platform.release();
 
-            // run
-            scheduler::run_under_context(isolate, run_main_context);
+            // get config
+            toml::table config;
+            std::ifstream config_file(shimakaze_config_path);
+
+            if (!config_file.is_open())
+            {
+                // this is not okay.
+                // throw a fatal error
+                console::fatal("Shimakaze", "A fatal error has occured within the modloader.");
+                console::fatal("Shimakaze", "The \"shimakaze.toml\" file is inaccessible.");
+
+                // dispose of everything
+                dispose(isolate);
+                delete create_params.array_buffer_allocator;
+                return;
+            }
+
+            // pass the config to a string stream
+            std::stringstream buf;
+            buf << config_file.rdbuf();
+
+            // parse the config
+            try
+            {
+                config = toml::parse(buf.str());
+            }
+            catch (const std::exception &e)
+            {
+                // this is ALSO not okay.
+                console::fatal("Shimakaze", "A fatal error has occured within the modloader.");
+                console::fatal("Shimakaze", "The \"shimakaze.toml\" file is invalid.");
+
+                // dispose of everything here too
+                dispose(isolate);
+                delete create_params.array_buffer_allocator;
+                return;
+            }
+
+            // set config
+            g_config = config;
+
+            // table data
+            toml::table *shimakaze_main = config["main"].as_table();
+            bool show_debug = shimakaze_main->get("show_debug")->value_or(true);
+
+            console::debug_if("Shimakaze", "Successfully loaded configuration file", show_debug);
+
+            /// MODLOADER SECTION START
+            std::vector<std::filesystem::path> starting_mod_files;
+            console::debug_if("Shimakaze", "Adding first set of mods to vector", show_debug);
+
+            // read mod folder directory
+            for (const auto &entry : std::filesystem::directory_iterator(shimakaze_mods_path))
+            {
+                // push the mods to the folder
+                const std::filesystem::path entry_path = entry.path();
+                starting_mod_files.push_back(entry.path());
+            }
+
+            // run the loop under a new thread
+            std::thread handler_loop(handler::run_mod_set, isolate, starting_mod_files);
+            handler_loop.detach();
+        }
+
+        void dispose(v8::Isolate *isolate)
+        {
+            // deconstruct v8
+            console::info("Shimakaze", "Unloading Shimakaze");
+            isolate->Dispose();
+
+            v8::V8::Dispose();
+            v8::V8::DisposePlatform();
+
+            // delete leftover objects
+            delete g_platform;
+        }
+
+        void run_under_main_context(std::string name, v8::Local<v8::Context> context)
+        {
+            // get the main isolate
+            v8::Isolate *main_isolate = context->GetIsolate();
+            v8::Context::Scope context_scope(context);
+            {
+                // our scope!
+                v8::HandleScope handle_scope(main_isolate);
+                v8::Local<v8::String> modName = bind::to_v8(main_isolate, "(shimakaze)");
+
+                v8::TryCatch try_catch(main_isolate);
+                v8::Local<v8::String> source = bind::to_v8(main_isolate, "\"hi\"");
+
+                v8::Local<v8::Script> script;
+
+                bool compiled = v8::Script::Compile(context, source).ToLocal(&script);
+                if (!compiled)
+                {
+                    std::cout << *try_catch.Exception() << std::endl;
+                }
+                else
+                {
+                    v8::Local<v8::Value> result;
+                    if (!script->Run(context).ToLocal(&result))
+                    {
+                        if (try_catch.HasCaught())
+                        {
+                            std::cout << *try_catch.Exception() << std::endl;
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        if (try_catch.HasCaught())
+                        {
+                            std::cout << *try_catch.Exception() << std::endl;
+                            return;
+                        }
+
+                        if (!result->IsUndefined())
+                        {
+                            v8::String::Utf8Value str(main_isolate, result);
+                            const char *cstr = *str;
+                            printf("%s\n", cstr);
+                        }
+                    }
+                }
+            }
         }
 
         void assert_shimakaze_directory()
         {
-            // get the base paths
-            auto base_path = std::filesystem::current_path();
-            auto shimakaze_path = base_path / "shimakaze";
-            auto shimakaze_mods_path = shimakaze_path / "mods";
-            auto shimakaze_config_path = shimakaze_path / "shimakaze.toml";
-
             // get default config
             toml::table default_config = SHIMAKAZE_DEFAULT_CONFIG;
 
@@ -161,74 +289,21 @@ namespace shimakaze
             }
         }
 
-        void run_main_context(v8::Local<v8::Context> context)
-        {
-            std::cout << "running context" << std::endl;
-
-            // get the main isolate
-            v8::Isolate *main_isolate = context->GetIsolate();
-            std::cout << "creating context scope" << std::endl;
-            v8::Context::Scope context_scope(context);
-            {
-                // our scope!
-                v8::HandleScope handle_scope(main_isolate);
-                std::cout << "context scope created" << std::endl;
-
-                std::cout << "running script" << std::endl;
-                v8::Local<v8::String> name(v8::String::NewFromUtf8Literal(context->GetIsolate(), "(shimakaze)"));
-
-                v8::TryCatch try_catch(main_isolate);
-                v8::Local<v8::String> source = v8::String::NewFromUtf8(context->GetIsolate(), "\"hi\"", v8::NewStringType::kNormal).ToLocalChecked();
-
-                v8::Local<v8::Script> script;
-
-                bool compiled = v8::Script::Compile(context, source).ToLocal(&script);
-                if (!compiled)
-                {
-                    std::cout << "didnt compile :(" << std::endl;
-                    std::cout << *try_catch.Exception() << std::endl;
-                }
-                else
-                {
-                    std::cout << "compiled script" << std::endl;
-                    v8::Local<v8::Value> result;
-                    if (!script->Run(context).ToLocal(&result))
-                    {
-                        if (try_catch.HasCaught())
-                        {
-                            std::cout << *try_catch.Exception() << std::endl;
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        std::cout << "ran script" << std::endl;
-                        if (try_catch.HasCaught())
-                        {
-                            std::cout << *try_catch.Exception() << std::endl;
-                            return;
-                        }
-
-                        if (!result->IsUndefined())
-                        {
-                            v8::String::Utf8Value str(main_isolate, result);
-                            const char *cstr = *str;
-                            printf("%s\n", cstr);
-                        }
-                    }
-                }
-            }
-        }
-
         v8::Local<v8::ObjectTemplate> create_global_object(v8::Isolate *isolate)
         {
             // create a object template for the context's globals
-            bind::Module globals(isolate);
+            v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(isolate);
+
+            // create submoduled objects
+            v8::Local<v8::ObjectTemplate> process = context::create_process_object(isolate);
 
             // process;
-            globals.submodule("process", context::create_process_object(isolate));
+            global->Set(isolate, "process", process);
 
-            return globals.get_template();
+            // runtime;
+            context::create_common_runtime(isolate, global);
+
+            return global;
         }
 
         v8::Local<v8::Context> create_main_context(v8::Isolate *isolate)
