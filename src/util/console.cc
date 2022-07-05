@@ -29,6 +29,12 @@ namespace shimakaze {
             log(LoggingLevel::DBG, name, message);
         }
 
+        void debug_if(const char *name, const char *message, bool post) {
+            if (post) {
+                log(LoggingLevel::DBG, name, message);
+            }
+        }
+
         void info(const char *name, const char *message) {
             log(LoggingLevel::INFO, name, message);
         }
