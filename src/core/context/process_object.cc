@@ -28,14 +28,14 @@ namespace shimakaze
         }
 
         // create process object
-        bind::Module& create_process_object(v8::Isolate *isolate)
+        v8::Local<v8::ObjectTemplate> create_process_object(v8::Isolate *isolate)
         {
-            bind::Module module(isolate);
+            v8::Local<v8::ObjectTemplate> process = v8::ObjectTemplate::New(isolate);
 
             // process.print(string)
-            module.function("print", process_print);
+            process->Set(isolate, "print", v8::FunctionTemplate::New(isolate, process_print));
 
-            return module;
+            return process;
         }
     }
 }

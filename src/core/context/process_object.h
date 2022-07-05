@@ -8,6 +8,6 @@ namespace shimakaze {
         void process_print(const v8::FunctionCallbackInfo<v8::Value>& args);
 
         // create process object
-        bind::Module& create_process_object(v8::Isolate* isolate);
+        v8::Local<v8::ObjectTemplate> create_process_object(v8::Isolate* isolate);
     }
 }

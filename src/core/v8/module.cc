@@ -12,7 +12,7 @@ namespace shimakaze
 
         v8::Isolate *Module::get_isolate()
         {
-            return this->isolate;
+            return isolate;
         }
 
         v8::Local<v8::ObjectTemplate> Module::get_template()
@@ -20,15 +20,59 @@ namespace shimakaze
             return object_template;
         }
 
+        std::map<const char *, v8::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>>> Module::get_values()
+        {
+            return values;
+        }
+
         v8::Local<v8::Object> Module::construct()
         {
-            return object_template->NewInstance(isolate->GetCurrentContext()).ToLocalChecked();
+            v8::HandleScope construct_scope(isolate);
+            v8::MaybeLocal<v8::Object> maybe_object = object_template->NewInstance(isolate->GetCurrentContext());
+            v8::Local<v8::Object> object = maybe_object.ToLocalChecked();
+
+            return object;
         }
 
         template <typename Instance>
         Module &Module::set(const char *name, v8::Local<Instance> value)
         {
             object_template->Set(isolate, name, value);
+
+            return *this;
+        }
+
+        Module &Module::value(const char *name, v8::Local<v8::Value> value, bool add_to_map = false)
+        {
+            object_template->Set(isolate, name, value);
+
+            if (add_to_map)
+            {
+                // store the object into a persistent scope
+                v8::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> persistent(isolate, value);
+                values.insert(
+                    std::pair(
+                        name,
+                        persistent));
+            }
+
+            return *this;
+        }
+
+        Module &Module::value(const char *name, v8::Local<v8::ObjectTemplate> value, bool add_to_map = false)
+        {
+            object_template->Set(isolate, name, value);
+
+            // we just can't add it to the map at all lol
+
+            return *this;
+        }
+        Module &Module::value(const char *name, v8::Local<v8::FunctionTemplate> value, bool add_to_map = false)
+        {
+            object_template->Set(isolate, name, value);
+
+            // we just can't add it to the map at all lol
+
             return *this;
         }
 
@@ -56,7 +100,7 @@ namespace shimakaze
         }
 
         template <typename Const>
-        Module &Module::constant(const char *name, Const &value)
+        Module &Module::constant(const char *name, v8::Local<Const> &value)
         {
             v8::HandleScope var_scope(isolate);
 
@@ -70,13 +114,35 @@ namespace shimakaze
 
         Module &Module::function(const char *name, v8::FunctionCallback func)
         {
-            object_template->Set(isolate, name, v8::FunctionTemplate::New(isolate, func));
+            value(name, v8::FunctionTemplate::New(isolate, func));
+
             return *this;
         }
 
         Module &Module::submodule(const char *name, Module &module)
         {
-            object_template->Set(isolate, name, module.get_template());
+            // depersist the template
+            // why do i have to do this?
+            object_template->Set(bind::to_v8(isolate, name), module.get_template());
+
+            return *this;
+        }
+
+        Module &Module::merge(Module &module)
+        {
+            // get the module's values
+            auto module_values = module.get_values();
+
+            // merge the module's values into this module
+            for (auto &[key, value] : module_values)
+            {
+                // convert it back to local
+                v8::Local<v8::Value> local = v8::Local<v8::Value>::New(isolate, value);
+
+                // set the value
+                set(key, local);
+            }
+
             return *this;
         }
     }
