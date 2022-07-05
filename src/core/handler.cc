@@ -1,7 +1,7 @@
 #pragma once
 
 #include "handler.h"
-#include "module_core.h"
+#include "module.h"
 
 #include "../hooks/menu_layer.h"
 #include "../hooks/cocos/scheduler_hook.h"

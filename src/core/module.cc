@@ -1,4 +1,4 @@
-#include "module_core.h"
+#include "module.h"
 
 namespace shimakaze
 {
@@ -27,6 +27,7 @@ namespace shimakaze
             context->GetIsolate()->ThrowException(v8::Exception::ReferenceError(bind::to_v8(context->GetIsolate(), "get the fuck out of here with that shit")));
 
             // todo: this is fucking bad LOL
+            // so basically i need to make proper module importation
             v8::MaybeLocal<v8::Module> mod = v8::MaybeLocal<v8::Module>();
             return mod;
         }

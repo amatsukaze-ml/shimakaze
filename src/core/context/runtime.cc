@@ -1,4 +1,4 @@
-#include "common_runtime.h"
+#include "runtime.h"
 
 namespace shimakaze
 {

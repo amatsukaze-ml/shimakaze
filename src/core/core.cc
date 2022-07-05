@@ -1,9 +1,9 @@
 #include "core.h"
 #include "handler.h"
-#include "module_core.h"
+#include "module.h"
 
-#include "context/process_object.h"
-#include "context/common_runtime.h"
+#include "context/process.h"
+#include "context/runtime.h"
 
 #include "../hooks/cocos/scheduler_hook.h"
 
