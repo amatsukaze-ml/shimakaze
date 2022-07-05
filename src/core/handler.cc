@@ -1,7 +1,9 @@
 #pragma once
 
 #include "handler.h"
+#include "module_core.h"
 
+#include "../hooks/menu_layer.h"
 #include "../hooks/cocos/scheduler_hook.h"
 
 #include <optional>
@@ -262,7 +264,7 @@ namespace shimakaze
 
                 /// MODLOADER RUN FILE LOGIC START
                 // get the current isolate from the scope
-                v8::Isolate *isolate = v8::Isolate::GetCurrent();
+                v8::Isolate *isolate = context->GetIsolate();
 
                 // create a context scope
                 v8::Context::Scope context_scope(context);
@@ -275,69 +277,101 @@ namespace shimakaze
 
                     // create a script name and origin
                     v8::Local<v8::String> mod_id = bind::to_v8(isolate, mod_table->get("mod_id")->ref<std::string>());
-                    v8::ScriptOrigin origin(isolate, mod_id);
-                    v8::Local<v8::Script> mod_script;
 
-                    // turn the script into a v8 local
-                    v8::Local<v8::String> script = bind::to_v8(isolate, mod_file);
+                    v8::ScriptOrigin origin(isolate,
+                                            mod_id,                 // resource name
+                                            0,                      // resource line offset
+                                            0,                      // resource column offset
+                                            false,                  // resource is shared
+                                            -1,                     // script id
+                                            v8::Local<v8::Value>(), // source map URL
+                                            false,                  // resource is opaque
+                                            false,                  // is wasm
+                                            true);                  // is module
+
+                    // turn the script's code into a v8 local
+                    v8::Local<v8::String> mod_code = bind::to_v8(isolate, mod_file);
+
+                    // create module data
+                    v8::MaybeLocal<v8::Module> mod_module;
+                    v8::ScriptCompiler::Source source(mod_code, origin);
 
                     console::debug_if("Shimakaze", "Compiling mod file");
-                    // compile the script
-                    if (!v8::Script::Compile(context, script, &origin).ToLocal(&mod_script))
-                    {
-                        // oh no, possible exception?
-                        log_exception(isolate, &try_catch);
-                        return;
-                    }
 
-                    console::debug_if("Shimakaze", "Running mod file");
-                    // run the script and save the result
-                    v8::Local<v8::Value> result;
-                    if (!mod_script->Run(context).ToLocal(&result))
+                    // compile the mod
+                    mod_module = v8::ScriptCompiler::CompileModule(isolate, &source);
+
+                    // now lets check if it exists or not
+                    v8::Local<v8::Module> mod;
+                    if (!mod_module.ToLocal(&mod))
                     {
                         // oh no, another possible exception?
                         log_exception(isolate, &try_catch);
                         return;
                     }
-
-                    if (try_catch.HasCaught())
-                    {
-                        // oh no, yet another possible exception?
-                        log_exception(isolate, &try_catch);
-                        return;
-                    }
-
-                    if (!result->IsUndefined())
-                    {
-                        // oh sick, the mod file returned a value
-                        // we'll throw that into the mod map
-                        add_mod(isolate, mod_config, result);
-                    }
-
-                    if (mod_name)
-                    {
-                        console::info("Shimakaze", std::format("Finished loading and running {}", *mod_name).c_str());
-                    }
                     else
                     {
-                        console::info("Shimakaze", std::format("Finished loading and running {}", mod_table->get("mod_id")->ref<std::string>()).c_str());
+                        console::debug_if("Shimakaze", "Running mod file");
+
+                        // woah a mod
+                        v8::Maybe<bool> result = mod->InstantiateModule(context, module::static_call);
+
+                        if (result.IsNothing())
+                        {
+                            if (try_catch.HasCaught())
+                            {
+                                // oh no, yet another possible exception?
+                                log_exception(isolate, &try_catch);
+                                return;
+                            }
+
+                            console::error("Shimakaze", std::format("An error has occured with the mod {}, but v8 has provided no useful insight as to why.", mod_table->get("mod_id")->ref<std::string>()).c_str());
+                            return;
+                        }
+
+                        v8::MaybeLocal<v8::Value> mod_result = mod->Evaluate(context);
+
+                        if (try_catch.HasCaught())
+                        {
+                            // oh no, yet another possible exception?
+                            log_exception(isolate, &try_catch);
+                            return;
+                        }
+
+                        if (!mod_result.IsEmpty())
+                        {
+                            // todo: this is wrong :)
+                            add_mod(isolate, mod_config, mod);
+                        }
+
+                        if (mod_name)
+                        {
+                            console::info("Shimakaze", std::format("Finished loading and running {}", *mod_name).c_str());
+                        }
+                        else
+                        {
+                            console::info("Shimakaze", std::format("Finished loading and running {}", mod_table->get("mod_id")->ref<std::string>()).c_str());
+                        }
                     }
                 }
 
                 /// MODLOADER RUN FILE LOGIC END
             }
 
-            void add_mod(v8::Isolate *isolate, toml::table mod_config, v8::Local<v8::Value> result)
+            void add_mod(v8::Isolate *isolate, toml::table mod_config, v8::Local<v8::Module> result)
             {
                 // add the reuslt to the mod map
                 std::optional<std::string> mod_id = mod_config["mod"]["mod_id"].value<std::string>();
 
                 g_mod_map.insert(
-                    std::make_pair<const char *, std::tuple<toml::table, COPYABLE_PERSISTENT<v8::Value>>>(
+                    std::make_pair<const char *, std::tuple<toml::table, COPYABLE_PERSISTENT<v8::Module>>>(
                         (*mod_id).c_str(),
                         std::make_tuple(
                             mod_config,
-                            COPYABLE_PERSISTENT<v8::Value>(isolate, result))));
+                            COPYABLE_PERSISTENT<v8::Module>(isolate, result))));
+
+                // update count
+                shimakaze::menu::update_mod_count(g_mod_map.size());
             }
 
             void log_exception(v8::Isolate *isolate, v8::TryCatch *try_catch)
@@ -408,19 +442,22 @@ namespace shimakaze
                 console::error("Shimakaze", header.c_str());
                 console::error("Shimakaze", std::format("{}{}", column_whitespace, arrow_whitespace).c_str());
 
-                if (try_catch->StackTrace(context).ToLocal(&stack_trace_str) && stack_trace_str->IsString() && stack_trace_str.As<v8::String>()->Length() > 0)
+                if (try_catch->StackTrace(context).ToLocal(&stack_trace_str))
                 {
-                    // we validated this is printable
-                    v8::String::Utf8Value stack_trace(isolate, stack_trace_str);
-                    const char *stack_trace_cstr = *stack_trace;
-
-                    // segment the stacktrace
-                    std::stringstream segment(stack_trace_cstr);
-                    std::string output;
-
-                    while (std::getline(segment, output, '\n'))
+                    if (stack_trace_str->IsString() && stack_trace_str.As<v8::String>()->Length() > 0)
                     {
-                        console::error("Shimakaze", output.c_str());
+                        // we validated this is printable
+                        v8::String::Utf8Value stack_trace(isolate, stack_trace_str);
+                        const char *stack_trace_cstr = *stack_trace;
+
+                        // segment the stacktrace
+                        std::stringstream segment(stack_trace_cstr);
+                        std::string output;
+
+                        while (std::getline(segment, output, '\n'))
+                        {
+                            console::error("Shimakaze", output.c_str());
+                        }
                     }
                 }
                 else

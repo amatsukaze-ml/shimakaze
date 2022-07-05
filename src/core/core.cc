@@ -1,7 +1,6 @@
 #include "core.h"
 #include "handler.h"
-
-#include "v8/module.h"
+#include "module_core.h"
 
 #include "context/process_object.h"
 #include "context/common_runtime.h"
@@ -40,6 +39,10 @@ namespace shimakaze
             v8::Isolate::CreateParams create_params;
             create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
             v8::Isolate *isolate = v8::Isolate::New(create_params);
+
+            isolate->SetHostImportModuleDynamicallyCallback(module::dynamic_call);
+            isolate->SetHostInitializeImportMetaObjectCallback(module::import_meta);
+
             v8::Isolate::Scope isolate_scope(isolate);
             v8::HandleScope handle_scope(isolate);
 
