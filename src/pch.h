@@ -13,7 +13,10 @@
 #include <gd.h>
 #include <toml.hpp>
 
+/// UTILITIES 
+
 #include "util/console.h"
+#include "core/v8/convert.h"
 
 USING_NS_CC;
 
@@ -24,7 +27,16 @@ namespace gd
 
 #pragma warning(pop)
 
-// UTILITY FUNCTIONS
+/// UTILITY TYPEDEFS
+
+template <typename Value>
+using COPYABLE_PERSISTENT = v8::Persistent<Value, v8::CopyablePersistentTraits<Value>>;
+
+template <typename Value>
+using NON_COPYABLE_PERSISTENT = v8::Persistent<Value, v8::NonCopyablePersistentTraits<Value>>;
+
+
+/// UTILITY FUNCTIONS
 
 inline std::string replace_all(std::string str, const std::string &from, const std::string &to)
 {
@@ -88,18 +100,15 @@ inline std::string replace_all(std::string str, const std::string &from, const s
     MH_EnableHook(reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol))); \
     shimakaze::console::info("Shimakaze", std::format("Added a cocos2d hook on {} created by Shimakaze", replace_all(std::string(#name), std::string("_"), std::string("::"))).c_str())
 
-#define SHIMAKAZE_GD_HOOK_FROM(address, name, from)              \
+#define SHIMAKAZE_GD_HOOK_NOLOG(address, name)              \
     MH_CreateHook(                                               \
         reinterpret_cast<LPVOID>(gd::base + address),            \
         reinterpret_cast<LPVOID>(&name##_H),                     \
         reinterpret_cast<LPVOID *>(&name));                      \
-    MH_EnableHook(reinterpret_cast<LPVOID>(gd::base + address)); \
-    shimakaze::console::info("Shimakaze", std::format("Added a Geometry Dash hook on {} created by {}", replace_all(std::string(#name), std::string("_"), std::string("::")), #from).c_str())
-
-#define SHIMAKAZE_COCOS_HOOK_FROM(symbol, name, from)                                \
+    MH_EnableHook(reinterpret_cast<LPVOID>(gd::base + address));
+#define SHIMAKAZE_COCOS_HOOK_NOLOG(symbol, name)                               \
     MH_CreateHook(                                                                   \
         reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol)),            \
         reinterpret_cast<LPVOID>(&name##_H),                                         \
         reinterpret_cast<LPVOID *>(&name));                                          \
     MH_EnableHook(reinterpret_cast<LPVOID>(GetProcAddress(gd::cocos_base, symbol))); \
-    shimakaze::console::info("Shimakaze", std::format("Added a cocos2d hook on {} created by {}", replace_all(std::string(#name), std::string("_"), std::string("::")), #from).c_str())
