@@ -2,6 +2,15 @@
 
 #include <format>
 
+namespace shimakaze {
+    namespace menu {
+        void update_mod_count(std::size_t count) {
+            std::string modCount = std::format("{} mods loaded", count);
+            shimakaze_mod_count_label->setString(modCount.c_str());
+        }
+    }
+}
+
 SHIMAKAZE_CALL(MenuLayer_init, CCLayer *, bool)
 {
     if (!MenuLayer_init(self)) {
@@ -15,19 +24,19 @@ SHIMAKAZE_CALL(MenuLayer_init, CCLayer *, bool)
     std::string shimakazeVersion = std::format("Shimakaze {}", SHIMAKAZE_VERSION);
     std::string modCount = std::format("0 mods loaded");
 
-    auto shimakazeLabel = CCLabelBMFont::create(shimakazeVersion.c_str(), "bigFont.fnt");
-    auto modCountLabel = CCLabelBMFont::create(modCount.c_str(), "bigFont.fnt");
+    shimakaze::menu::shimakaze_label = CCLabelBMFont::create(shimakazeVersion.c_str(), "bigFont.fnt");
+    shimakaze::menu::shimakaze_mod_count_label = CCLabelBMFont::create(modCount.c_str(), "bigFont.fnt");
 
-    shimakazeLabel->setAnchorPoint({ 1.0f, 0.0f });
-    shimakazeLabel->setScale(0.25f);
-    shimakazeLabel->setPosition(ccp(size.width, 7.5f));
+    shimakaze::menu::shimakaze_label->setAnchorPoint({ 1.0f, 0.0f });
+    shimakaze::menu::shimakaze_label->setScale(0.25f);
+    shimakaze::menu::shimakaze_label->setPosition(ccp(size.width, 7.5f));
 
-    modCountLabel->setAnchorPoint({ 1.0f, 0.0f });
-    modCountLabel->setScale(0.25f);
-    modCountLabel->setPosition(ccp(size.width, 0.0f));
+    shimakaze::menu::shimakaze_mod_count_label->setAnchorPoint({ 1.0f, 0.0f });
+    shimakaze::menu::shimakaze_mod_count_label->setScale(0.25f);
+    shimakaze::menu::shimakaze_mod_count_label->setPosition(ccp(size.width, 0.0f));
 
-    self->addChild(shimakazeLabel);
-    self->addChild(modCountLabel);
+    self->addChild(shimakaze::menu::shimakaze_label);
+    self->addChild(shimakaze::menu::shimakaze_mod_count_label);
 
     return true;
 }
