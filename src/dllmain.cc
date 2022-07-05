@@ -40,7 +40,7 @@ BOOL APIENTRY DllMain(
 
     if (ul_reason == DLL_PROCESS_ATTACH)
     {
-        CreateThread(0, 0x100, main_thread, hModule, 0, 0);
+        CreateThread(0, 0x1000, main_thread, hModule, 0, 0);
     }
 
     return TRUE;
