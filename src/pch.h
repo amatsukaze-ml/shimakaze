@@ -16,7 +16,7 @@
 /// UTILITIES 
 
 #include "util/console.h"
-#include "v8/convert.h"
+#include "bid/convert.h"
 
 USING_NS_CC;
 
