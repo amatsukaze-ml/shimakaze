@@ -19,6 +19,7 @@ namespace shimakaze
     {
         void log(LoggingLevel level, const char* name, const char* message);
         void debug(const char* name, const char* message);
+        void debug_if(const char* name, const char* message, bool post = true);
         void info(const char* name, const char* message);
         void warn(const char* name, const char* message);
         void error(const char* name, const char* message);
