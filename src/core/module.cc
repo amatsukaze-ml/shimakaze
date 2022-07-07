@@ -1,5 +1,7 @@
 #include "module.h"
 
+#include "handler.h"
+
 namespace shimakaze
 {
     namespace module
@@ -23,6 +25,20 @@ namespace shimakaze
         {
             v8::String::Utf8Value specifier_name(context->GetIsolate(), specifier);
             const char* specifier_name_cstr = bind::to_cstr(specifier_name);
+
+            std::cout << "static_call: " << specifier_name_cstr << std::endl;
+            std::cout << "static_call: " << core::handler::g_libraries.size() << std::endl;
+
+            // check standard libraries first
+            auto standard_call = core::handler::g_libraries.find(specifier_name_cstr);
+            if (standard_call != core::handler::g_libraries.end()) {
+                // this is a standard library
+                // convert it to a local
+                v8::Local<v8::Module> local_call = v8::Local<v8::Module>::New(context->GetIsolate(), standard_call->second);
+
+                // return it as a maybe local
+                return v8::MaybeLocal<v8::Module>(local_call);
+            }
 
             context->GetIsolate()->ThrowException(v8::Exception::ReferenceError(bind::to_v8(context->GetIsolate(), "get the fuck out of here with that shit")));
 

@@ -6,6 +6,8 @@
 #include "context/runtime.h"
 
 #include "../standard/standard.h"
+#include "../standard/cocos.h"
+#include "../standard/gd.h"
 
 #include "../hooks/loading_layer.h"
 #include "../hooks/cocos/scheduler_hook.h"
@@ -70,12 +72,15 @@ namespace shimakaze
 
             console::debug_if("Shimakaze", "Successfully loaded configuration file", show_debug);
 
-            /// STANDARD LIBRARY SECTION START
-            // drag in the main standard library
+            /// STANDARD LIBRARY SECTION STARTies
             v8::Local<v8::Module> standard = standard::create_standard_module(isolate);
+            v8::Local<v8::Module> cocos = standard::create_cocos_module(isolate);
+            v8::Local<v8::Module> gd = standard::create_gd_module(isolate);
 
-            // add the library
+            // add the libraries
             handler::add_library(isolate, "shimakaze", standard);
+            handler::add_library(isolate, "cocos2d", cocos);
+            handler::add_library(isolate, "gd", gd);
 
             /// STANDARD LIBRARY SECTION END
             shimakaze::loading::update_progress_text("Setup: Precalculating amount of mods...");

@@ -3,6 +3,9 @@
 #pragma warning(push)
 #pragma warning(disable : 4251)
 
+// Shut the fuck up lmao
+#define _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS
+
 #define WIN32_LEAN_AND_MEAN
 
 #include <Windows.h>
@@ -48,6 +51,11 @@ inline std::string replace_all(std::string str, const std::string &from, const s
     return str;
 }
 
+template<typename T1, typename T2>
+T1& from_offset(T2 object, unsigned int offset) {
+    return *reinterpret_cast<T1*>(reinterpret_cast<uintptr_t>(object) + offset);
+}
+
 /// CONFIG SECTION
 
 #define SHIMAKAZE_VERSION "0.1.0-RC.1"
@@ -65,6 +73,18 @@ inline std::string replace_all(std::string str, const std::string &from, const s
                 }                                      \
             }                                          \
         }                                              \
+    }
+
+/// lifesaver section
+
+#define DEFINE_FIELD(class_name, field, type, converter) \
+    void Get##class_name##field(Local<String> name, const PropertyCallbackInfo<Value>& info) { \
+        void* value = _get##class_name<Value>(name, info)->field##_; \
+        info.GetReturnValue().set(type::New(value)); \
+    } \
+    void Set##class_name##field(Local<String> name, Local<Value> value, const PropertyCallbackInfo<Value>& info) { \
+        class_name* pt = _get##class_name<void>(name, info) \
+        pt->field##_ = value->converter(); \
     }
 
 /// HOOKS SECTION

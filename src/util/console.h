@@ -2,7 +2,6 @@
 
 #include "../pch.h"
 
-__forceinline
 enum class LoggingLevel
 {
     DBG = 0,

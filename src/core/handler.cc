@@ -114,6 +114,15 @@ namespace shimakaze
                 // update progress bar
                 shimakaze::loading::update_progress((float)shimakaze::core::g_mod_count, (float)shimakaze::core::g_mod_loaded_count);
 
+                if (shimakaze::core::g_mod_count == shimakaze::core::g_mod_loaded_count)
+                {
+                    // its impossible for it to NOT be equal now
+                    shimakaze::core::g_mod_count = g_mod_map.size();
+
+                    // we can now start the game
+                    shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
+                }
+
                 for (const std::filesystem::path entry_path : mods)
                 {
                     console::debug_if("Shimakaze", std::format("Reading item at \"{}\"", entry_path.string()).c_str(), show_debug);
@@ -211,7 +220,140 @@ namespace shimakaze
 
                             if (cancel_loading)
                             {
+                                shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
                                 continue;
+                            }
+                        }
+
+                        // RESOURCE FOLDER HANDLING
+                        std::optional<std::string> resource_folder = mod_config["mod"]["resource_folder"].value<std::string>();
+                        console::debug_if("Shimakaze", std::format("Attempting to find if mod \"{}\" has a valid resource folder...", *mod_id).c_str(), show_debug);
+
+                        if (resource_folder)
+                        {
+                            // convert the folder to a path
+                            std::filesystem::path resource_folder_path = entry_path / std::filesystem::path(*resource_folder);
+                            console::debug_if("Shimakaze", std::format("Resource folder found.", *mod_id).c_str(), show_debug);
+
+                            // validate the folder even exists
+                            if (!std::filesystem::exists(resource_folder_path))
+                            {
+                                console::debug_if("Shimakaze", "The mod provided a resource folder name, but the folder itself didn't exist.", show_debug);
+                                shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
+                                continue;
+                            }
+                            else
+                            {
+                                // attempt to load resources
+                                shimakaze::loading::update_progress_text(std::format("Initializing: Checking resources for mod \"{}\"...", *mod_id).c_str());
+                                console::debug_if("Shimakaze", std::format("Reading over resources folder for mod \"{}\"...", *mod_id).c_str(), show_debug);
+
+                                std::vector<std::filesystem::path> resources_plist;
+                                std::vector<std::filesystem::path> resources_png;
+                                std::vector<std::string> loaded_resources;
+
+                                for (const auto &entry : std::filesystem::directory_iterator(resource_folder_path))
+                                {
+                                    auto loadedit = std::find(loaded_resources.begin(), loaded_resources.end(), entry.path().stem().string());
+                                    if (!entry.path().has_stem() || loadedit != loaded_resources.end())
+                                    {
+                                        // unknown
+                                        continue;
+                                    }
+
+                                    if (entry.path().extension() == ".plist")
+                                    {
+                                        // plist file
+                                        auto it = std::find(resources_png.begin(), resources_png.end(), entry.path().stem());
+                                        if (it != resources_png.end())
+                                        {
+                                            // add to loaded resources
+                                            loaded_resources.push_back(entry.path().stem().string());
+
+                                            // remove png from list
+                                            std::erase(resources_png, *it);
+                                        }
+                                        else
+                                        {
+                                            // add to resources plist
+                                            resources_plist.push_back(entry.path().stem());
+                                        }
+                                    }
+                                    else if (entry.path().extension() == ".png")
+                                    {
+                                        // png file
+                                        auto it = std::find(resources_plist.begin(), resources_plist.end(), entry.path().stem());
+                                        if (it != resources_plist.end())
+                                        {
+                                            // add to loaded_resources
+                                            loaded_resources.push_back(entry.path().stem().string());
+
+                                            // remove png from list
+                                            std::erase(resources_plist, *it);
+                                        }
+                                        else
+                                        {
+                                            // add to resources png
+                                            resources_png.push_back(entry.path().stem());
+                                        }
+                                    }
+                                }
+
+                                // don't uselessly clog the file cache vector
+                                bool setSearch = false;
+                                if (loaded_resources.size() > 0)
+                                {
+                                    // add file path to CCFileUtils
+                                    CCFileUtils *fileUtils = CCFileUtils::sharedFileUtils();
+                                    std::vector<std::string> searchPaths = fileUtils->getSearchPaths();
+                                    searchPaths.insert(searchPaths.begin(), resource_folder_path.string());
+                                    fileUtils->setSearchPaths(searchPaths);
+
+                                    // this is true now
+                                    setSearch = true;
+
+                                    // loading all possible resources
+                                    for (const auto &resource : loaded_resources)
+                                    {
+                                        shimakaze::loading::update_progress_text(std::format("Initializing: Loading resource \"{}\" for mod \"{}\"...", resource, *mod_id).c_str());
+
+                                        // load the resource
+                                        handler::load_resource(
+                                            resource_folder_path,
+                                            std::make_tuple<std::filesystem::path, std::filesystem::path>(
+                                                resource_folder_path / std::filesystem::path(resource + ".plist"),
+                                                resource_folder_path / std::filesystem::path(resource + ".png")),
+                                            false);
+                                    }
+                                }
+
+                                // load pngs
+                                if (resources_png.size() > 0)
+                                {
+                                    if (setSearch == false)
+                                    {
+                                        // add file path to CCFileUtils
+                                        // it didn't before
+                                        CCFileUtils *fileUtils = CCFileUtils::sharedFileUtils();
+                                        std::vector<std::string> searchPaths = fileUtils->getSearchPaths();
+                                        searchPaths.insert(searchPaths.begin(), resource_folder_path.string());
+                                        fileUtils->setSearchPaths(searchPaths);
+                                    }
+
+                                    // loading all possible images
+                                    for (const auto &resource : loaded_resources)
+                                    {
+                                        shimakaze::loading::update_progress_text(std::format("Initializing: Loading resource \"{}\" for mod \"{}\"...", resource, *mod_id).c_str());
+
+                                        // load the resource
+                                        handler::load_resource(
+                                            resource_folder_path,
+                                            std::make_tuple<std::filesystem::path, std::filesystem::path>(
+                                                resource_folder_path / std::filesystem::path(resource + ".plist"),
+                                                resource_folder_path / std::filesystem::path(resource + ".png")),
+                                            true);
+                                    }
+                                }
                             }
                         }
 
@@ -258,6 +400,29 @@ namespace shimakaze
                     // run the loop again with the remaining mods
                     run_mod_set(isolate, remaining_mods_files);
                 }
+            }
+
+            void load_resource(std::filesystem::path, std::tuple<std::filesystem::path, std::filesystem::path> resource, bool imageOnly)
+            {
+                // this is a very volatile function
+                // undoubtedly, this runs under the assumption that both a .plist and a .png file are present
+                // (sometimes)
+                
+                // regardless, get the shared texture cache & sprite frame cache
+                auto texture_cache = CCTextureCache::sharedTextureCache();
+                auto sprite_frame_cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+
+                if (imageOnly == true)
+                {
+                    // add the png
+                    texture_cache->addImage(std::get<0>(resource).string().c_str(), false);
+
+                    // nothing else
+                    return;
+                }
+
+                // add the plist
+                sprite_frame_cache->addSpriteFramesWithFile(std::get<1>(resource).string().c_str());
             }
 
             void run_mod_file(std::string mod_file, v8::Local<v8::Context> context)
@@ -324,27 +489,44 @@ namespace shimakaze
 
                         // failed to load mod
                         shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
+
+                        if (shimakaze::core::g_mod_count == shimakaze::core::g_mod_loaded_count)
+                        {
+                            // its impossible for it to NOT be equal now
+                            shimakaze::core::g_mod_count = g_mod_map.size();
+
+                            // we can now start the game
+                            shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
+                        }
                         return;
                     }
                     else
                     {
-                        console::debug_if("Shimakaze", "Running mod file");
+                        console::debug_if("Shimakaze", "Running mod file", show_debug);
 
                         // woah a mod
                         v8::Maybe<bool> result = mod->InstantiateModule(context, module::static_call);
-                        console::debug_if("Shimakaze", "instantiated");
 
                         if (result.IsNothing())
                         {
-                            console::debug_if("Shimakaze", "nothing");
+                            console::debug_if("Shimakaze", "nothing", show_debug);
                             if (try_catch.HasCaught())
                             {
-                                console::debug_if("Shimakaze", "inner exception");
+                                console::debug_if("Shimakaze", "inner exception", show_debug);
                                 // oh no, yet another possible exception?
                                 log_exception(isolate, &try_catch);
 
                                 // failed to load mod
                                 shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
+
+                                if (shimakaze::core::g_mod_count == shimakaze::core::g_mod_loaded_count)
+                                {
+                                    // its impossible for it to NOT be equal now
+                                    shimakaze::core::g_mod_count = g_mod_map.size();
+
+                                    // we can now start the game
+                                    shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
+                                }
                                 return;
                             }
 
@@ -361,6 +543,15 @@ namespace shimakaze
 
                             // failed to load mod
                             shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
+
+                            if (shimakaze::core::g_mod_count == shimakaze::core::g_mod_loaded_count)
+                            {
+                                // its impossible for it to NOT be equal now
+                                shimakaze::core::g_mod_count = g_mod_map.size();
+
+                                // we can now start the game
+                                shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
+                            }
                             return;
                         }
 
@@ -385,10 +576,9 @@ namespace shimakaze
                         {
                             // its impossible for it to NOT be equal now
                             shimakaze::core::g_mod_count = g_mod_map.size();
-                            
+
                             // we can now start the game
                             shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
-                            
                         }
                     }
                 }
@@ -422,6 +612,8 @@ namespace shimakaze
                     std::make_pair<const char *, COPYABLE_PERSISTENT<v8::Module>>(
                         name.c_str(),
                         COPYABLE_PERSISTENT<v8::Module>(isolate, library)));
+
+                std::cout << "Added library: " << name << std::endl;
             }
 
             void log_exception(v8::Isolate *isolate, v8::TryCatch *try_catch)
