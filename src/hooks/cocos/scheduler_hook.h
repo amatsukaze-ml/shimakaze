@@ -6,6 +6,7 @@ namespace shimakaze
 {
     namespace scheduler
     {
+        void run_on_main_thread(std::function<void()> func);
         void run_under_context(v8::Isolate* isolate, std::string script, std::function<void(std::string, v8::Local<v8::Context>)> func);
         void run_value_under_context(v8::Isolate* isolate, v8::Local<v8::Value> value, std::function<void(v8::Local<v8::Value>, v8::Local<v8::Context>)> func);
         

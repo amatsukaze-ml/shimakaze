@@ -1,9 +1,11 @@
 #pragma once
 
 #include "handler.h"
+#include "core.h"
 #include "module.h"
 
 #include "../hooks/menu_layer.h"
+#include "../hooks/loading_layer.h"
 #include "../hooks/cocos/scheduler_hook.h"
 
 #include <optional>
@@ -109,6 +111,9 @@ namespace shimakaze
                     std::this_thread::sleep_for(std::chrono::milliseconds(5000));
                 }
 
+                // update progress bar
+                shimakaze::loading::update_progress((float)shimakaze::core::g_mod_count, (float)shimakaze::core::g_mod_loaded_count);
+
                 for (const std::filesystem::path entry_path : mods)
                 {
                     console::debug_if("Shimakaze", std::format("Reading item at \"{}\"", entry_path.string()).c_str(), show_debug);
@@ -118,6 +123,9 @@ namespace shimakaze
                         // this is a mod directory
                         // get the mod's toml configuration
                         const std::filesystem::path toml_path = entry_path / "mod.toml";
+
+                        // update progress text
+                        shimakaze::loading::update_progress_text(std::format("Initializing: Reading configuration for possible mod \"{}\"...", entry_path.filename().string()).c_str());
 
                         // parse it as a toml file
                         toml::table mod_config = handler::read_mod_config_file(toml_path);
@@ -129,6 +137,8 @@ namespace shimakaze
                         {
                             continue;
                         }
+
+                        shimakaze::loading::update_progress_text(std::format("Initializing: Reading configuration for mod \"{}\"...", *mod_id).c_str());
 
                         // we can finally use mod id in the debug
                         auto mod_count = std::ranges::count(loaded_modIds.begin(), loaded_modIds.end(), *mod_id);
@@ -143,6 +153,9 @@ namespace shimakaze
                             // inform the user of htis
                             console::error("Shimakaze", std::format("There was a problem starting the \"{}\" mod.", *mod_id).c_str());
                             console::error("Shimakaze", "A mod with this id already exists!");
+
+                            // decrease mod count as this one is invalid
+                            shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
 
                             continue;
                         }
@@ -227,6 +240,7 @@ namespace shimakaze
                         mod_stream << mod_file_stream.rdbuf();
 
                         // we can now start the mod :D
+                        shimakaze::loading::update_progress_text(std::format("Initializing: Running \"{}\"...", *mod_id).c_str());
                         scheduler::run_under_context(isolate, mod_stream.str(), handler::run_mod_file);
                     }
                     else if (std::filesystem::is_regular_file(entry_path))
@@ -307,6 +321,9 @@ namespace shimakaze
                     {
                         // oh no, another possible exception?
                         log_exception(isolate, &try_catch);
+
+                        // failed to load mod
+                        shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
                         return;
                     }
                     else
@@ -315,13 +332,19 @@ namespace shimakaze
 
                         // woah a mod
                         v8::Maybe<bool> result = mod->InstantiateModule(context, module::static_call);
+                        console::debug_if("Shimakaze", "instantiated");
 
                         if (result.IsNothing())
                         {
+                            console::debug_if("Shimakaze", "nothing");
                             if (try_catch.HasCaught())
                             {
+                                console::debug_if("Shimakaze", "inner exception");
                                 // oh no, yet another possible exception?
                                 log_exception(isolate, &try_catch);
+
+                                // failed to load mod
+                                shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
                                 return;
                             }
 
@@ -335,6 +358,9 @@ namespace shimakaze
                         {
                             // oh no, yet another possible exception?
                             log_exception(isolate, &try_catch);
+
+                            // failed to load mod
+                            shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
                             return;
                         }
 
@@ -346,11 +372,23 @@ namespace shimakaze
 
                         if (mod_name)
                         {
+                            shimakaze::loading::update_progress_text(std::format("Initializing: Successfully ran and loaded \"{}\".", *mod_name).c_str());
                             console::info("Shimakaze", std::format("Finished loading and running {}", *mod_name).c_str());
                         }
                         else
                         {
+                            shimakaze::loading::update_progress_text(std::format("Initializing: Successfully ran and loaded \"{}\".", mod_table->get("mod_id")->ref<std::string>()).c_str());
                             console::info("Shimakaze", std::format("Finished loading and running {}", mod_table->get("mod_id")->ref<std::string>()).c_str());
+                        }
+
+                        if (shimakaze::core::g_mod_count == shimakaze::core::g_mod_loaded_count)
+                        {
+                            // its impossible for it to NOT be equal now
+                            shimakaze::core::g_mod_count = g_mod_map.size();
+                            
+                            // we can now start the game
+                            shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
+                            
                         }
                     }
                 }
@@ -371,7 +409,19 @@ namespace shimakaze
                             COPYABLE_PERSISTENT<v8::Module>(isolate, result))));
 
                 // update count
-                shimakaze::menu::update_mod_count(g_mod_map.size());
+                shimakaze::core::g_mod_loaded_count = shimakaze::core::g_mod_loaded_count + 1;
+
+                // update progress bar
+                shimakaze::loading::update_progress((float)shimakaze::core::g_mod_count, (float)shimakaze::core::g_mod_loaded_count);
+            }
+
+            void add_library(v8::Isolate *isolate, std::string name, v8::Local<v8::Module> library)
+            {
+                // insert the module
+                g_libraries.insert(
+                    std::make_pair<const char *, COPYABLE_PERSISTENT<v8::Module>>(
+                        name.c_str(),
+                        COPYABLE_PERSISTENT<v8::Module>(isolate, library)));
             }
 
             void log_exception(v8::Isolate *isolate, v8::TryCatch *try_catch)

@@ -5,12 +5,15 @@
 #include "context/process.h"
 #include "context/runtime.h"
 
+#include "../standard/standard.h"
+
+#include "../hooks/loading_layer.h"
 #include "../hooks/cocos/scheduler_hook.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
 #include <fstream>
-#include <filesystem>
 #include <format>
 #include <thread>
 
@@ -25,6 +28,11 @@ namespace shimakaze
     {
         void start()
         {
+            shimakaze::loading::update_progress_text("Setup: Starting v8 Engine...");
+
+            // we're creating an arbitrary progress limit for the progress bar
+            float arbitrary_limit = 4.0f;
+
             // create a platform for v8
             std::unique_ptr<v8::Platform> platform = v8::platform::NewDefaultPlatform();
             v8::V8::InitializePlatform(platform.get());
@@ -32,8 +40,8 @@ namespace shimakaze
             // initialize v8
             v8::V8::Initialize();
 
-            // assert the shimakaze files exist
-            assert_shimakaze_directory();
+            shimakaze::loading::update_progress_text("Setup: Creating v8 Environment...");
+            shimakaze::loading::update_progress(arbitrary_limit, 1.0f);
 
             // create a v8 isolate environment
             v8::Isolate::CreateParams create_params;
@@ -46,6 +54,9 @@ namespace shimakaze
             v8::Isolate::Scope isolate_scope(isolate);
             v8::HandleScope handle_scope(isolate);
 
+            shimakaze::loading::update_progress_text("Setup: Creating v8 Context...");
+            shimakaze::loading::update_progress(arbitrary_limit, 2.0f);
+
             // create a main context for the isolate
             v8::Local<v8::Context> main_context = create_main_context(isolate);
             g_global_context.Reset(isolate, main_context);
@@ -53,68 +64,54 @@ namespace shimakaze
             // retain the livelihood of the pointer and release it
             g_platform = platform.release();
 
-            // get config
-            toml::table config;
-            std::ifstream config_file(shimakaze_config_path);
-
-            if (!config_file.is_open())
-            {
-                // this is not okay.
-                // throw a fatal error
-                console::fatal("Shimakaze", "A fatal error has occured within the modloader.");
-                console::fatal("Shimakaze", "The \"shimakaze.toml\" file is inaccessible.");
-
-                // dispose of everything
-                dispose(isolate);
-                delete create_params.array_buffer_allocator;
-                return;
-            }
-
-            // pass the config to a string stream
-            std::stringstream buf;
-            buf << config_file.rdbuf();
-
-            // parse the config
-            try
-            {
-                config = toml::parse(buf.str());
-            }
-            catch (const std::exception &e)
-            {
-                // this is ALSO not okay.
-                console::fatal("Shimakaze", "A fatal error has occured within the modloader.");
-                console::fatal("Shimakaze", "The \"shimakaze.toml\" file is invalid.");
-
-                // dispose of everything here too
-                dispose(isolate);
-                delete create_params.array_buffer_allocator;
-                return;
-            }
-
-            // set config
-            g_config = config;
-
             // table data
-            toml::table *shimakaze_main = config["main"].as_table();
+            toml::table *shimakaze_main = g_config["main"].as_table();
             bool show_debug = shimakaze_main->get("show_debug")->value_or(true);
 
             console::debug_if("Shimakaze", "Successfully loaded configuration file", show_debug);
 
+            /// STANDARD LIBRARY SECTION START
+            // drag in the main standard library
+            v8::Local<v8::Module> standard = standard::create_standard_module(isolate);
+
+            // add the library
+            handler::add_library(isolate, "shimakaze", standard);
+
+            /// STANDARD LIBRARY SECTION END
+            shimakaze::loading::update_progress_text("Setup: Precalculating amount of mods...");
+            shimakaze::loading::update_progress(arbitrary_limit, 3.0f);
+
             /// MODLOADER SECTION START
             std::vector<std::filesystem::path> starting_mod_files;
             console::debug_if("Shimakaze", "Adding first set of mods to vector", show_debug);
+
+            // set base mod count to 0
+            g_mod_count = 0;
 
             // read mod folder directory
             for (const auto &entry : std::filesystem::directory_iterator(shimakaze_mods_path))
             {
                 // push the mods to the folder
                 const std::filesystem::path entry_path = entry.path();
-                starting_mod_files.push_back(entry.path());
+
+                // assert entry is a directory
+                if (std::filesystem::is_directory(entry_path))
+                {
+                    // push the path to the vector
+                    starting_mod_files.push_back(entry_path);
+                    g_mod_count++;
+                }
             }
 
+            // arbitrary setup loading limit complete
+            shimakaze::loading::update_progress_text("Setup: Complete");
+            shimakaze::loading::update_progress(arbitrary_limit, arbitrary_limit);
+
+            std::cout << "hi" << std::endl;
+
             // run the loop under a new thread
-            std::thread handler_loop(handler::run_mod_set, isolate, starting_mod_files);
-            handler_loop.detach();
+            g_mod_loaded_count = 0;
+            handler::run_mod_set(isolate, starting_mod_files);
         }
 
         void dispose(v8::Isolate *isolate)
@@ -178,6 +175,45 @@ namespace shimakaze
                     }
                 }
             }
+        }
+
+        bool assert_configuration()
+        {
+            // get config
+            toml::table config;
+            std::ifstream config_file(shimakaze_config_path);
+
+            if (!config_file.is_open())
+            {
+                // this is not okay.
+                // throw a fatal error
+                console::fatal("Shimakaze", "A fatal error has occured within the modloader.");
+                console::fatal("Shimakaze", "The \"shimakaze.toml\" file is inaccessible.");
+
+                return false;
+            }
+
+            // pass the config to a string stream
+            std::stringstream buf;
+            buf << config_file.rdbuf();
+
+            // parse the config
+            try
+            {
+                config = toml::parse(buf.str());
+            }
+            catch (const std::exception &e)
+            {
+                // this is ALSO not okay.
+                console::fatal("Shimakaze", "A fatal error has occured within the modloader.");
+                console::fatal("Shimakaze", "The \"shimakaze.toml\" file is invalid.");
+
+                return false;
+            }
+
+            // set config
+            g_config = config;
+            return true;
         }
 
         void assert_shimakaze_directory()
