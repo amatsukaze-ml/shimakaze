@@ -38,5 +38,10 @@ namespace shimakaze
         {
             return *str ? *str : "<unknown string>";
         }
+
+        std::string to_str(const v8::String::Utf8Value& str)
+        {
+            return *str ? std::string(*str) : "<unknown string>";
+        }
     }
 }

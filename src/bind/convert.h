@@ -13,5 +13,6 @@ namespace shimakaze {
         v8::Local<v8::Number> to_v8(v8::Isolate *isolate, long value);
 
         const char* to_cstr(const v8::String::Utf8Value& value);
+        std::string to_str(const v8::String::Utf8Value& value);
     }
 }
