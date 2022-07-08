@@ -28,6 +28,9 @@ namespace shimakaze
 
             void add_mod(v8::Isolate* isolate, toml::table mod_config, v8::Local<v8::Module> result);
             void add_library(v8::Isolate *isolate, std::string name, v8::Local<v8::Module> library);
+
+            std::vector<COPYABLE_PERSISTENT<v8::Function>> get_hook_map(std::map<std::string, std::vector<COPYABLE_PERSISTENT<v8::Function>>> &hook_map, std::string name);
+            void add_hook(std::map<std::string, std::vector<COPYABLE_PERSISTENT<v8::Function>>> &hook_map, std::string name, COPYABLE_PERSISTENT<v8::Function> hook);
         }
     }
 }

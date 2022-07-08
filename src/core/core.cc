@@ -50,6 +50,9 @@ namespace shimakaze
             create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
             v8::Isolate *isolate = v8::Isolate::New(create_params);
 
+            // set isolate globally
+            g_isolate = isolate;
+
             isolate->SetHostImportModuleDynamicallyCallback(module::dynamic_call);
             isolate->SetHostInitializeImportMetaObjectCallback(module::import_meta);
 
@@ -111,8 +114,6 @@ namespace shimakaze
             // arbitrary setup loading limit complete
             shimakaze::loading::update_progress_text("Setup: Complete");
             shimakaze::loading::update_progress(arbitrary_limit, arbitrary_limit);
-
-            std::cout << "hi" << std::endl;
 
             // run the loop under a new thread
             g_mod_loaded_count = 0;

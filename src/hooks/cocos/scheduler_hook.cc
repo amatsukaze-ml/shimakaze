@@ -1,16 +1,21 @@
 #include "scheduler_hook.h"
 
 #include "../../core/core.h"
+#include "../../core/handler.h"
+
+#include "../menu_layer.h"
 
 #include <deque>
 #include <mutex>
 #include <thread>
 #include <tuple>
+#include <any>
 
 std::deque<std::tuple<v8::Isolate *, std::string, std::function<void(std::string, v8::Local<v8::Context>)>>> g_v8_context_runners;
 std::deque<std::tuple<v8::Isolate *, v8::Local<v8::Value>, std::function<void(v8::Local<v8::Value>, v8::Local<v8::Context>)>>> g_v8_value_context_runners;
 
 std::deque<std::function<void()>> g_main_thread_runners;
+std::deque<std::tuple<std::string, std::string, COPYABLE_PERSISTENT<v8::Function>>> g_add_hook_runners;
 
 namespace shimakaze
 {
@@ -19,6 +24,11 @@ namespace shimakaze
         void run_on_main_thread(std::function<void()> func)
         {
             g_main_thread_runners.push_back(func);
+        }
+
+        void add_hook_on_main_thread(std::string hook_map, std::string name, COPYABLE_PERSISTENT<v8::Function> hook)
+        {
+            g_add_hook_runners.push_back(std::make_tuple(hook_map, name, hook));
         }
 
         void run_under_context(v8::Isolate *isolate, std::string script, std::function<void(std::string, v8::Local<v8::Context>)> func)
@@ -82,7 +92,7 @@ SHIMAKAZE_CALL_ARGS(CCScheduler_update, CCScheduler *, void, float dt)
         shimakaze::scheduler::in_context_runner = false;
     }
 
-    if ((g_v8_context_runners.empty() && g_v8_value_context_runners.empty() && g_main_thread_runners.empty()) || shimakaze::scheduler::in_context_runner == true)
+    if ((g_v8_context_runners.empty() && g_v8_value_context_runners.empty() && g_main_thread_runners.empty() && g_add_hook_runners.empty()) || shimakaze::scheduler::in_context_runner == true)
     {
         // run to the game loop if we have no contexts to run
         CCScheduler_update(self, dt);
@@ -90,21 +100,26 @@ SHIMAKAZE_CALL_ARGS(CCScheduler_update, CCScheduler *, void, float dt)
         return;
     }
 
-    for (auto &runner : g_main_thread_runners)
+    for (auto const &func : g_add_hook_runners)
     {
+        std::string hook_map = std::get<0>(func);
+        if (hook_map == "menulayer") {
+            shimakaze::core::handler::add_hook(shimakaze::menu::menulayer_hooks, std::get<1>(func), std::get<2>(func));
+        }
+
+        // dequeue
+        g_add_hook_runners.pop_front();
+    }
+
+    for (auto const &runner : g_main_thread_runners)
+    {
+        std::cout << "real" << std::endl;
         runner();
 
         // dequeue
         g_main_thread_runners.pop_front();
     }
 
-    if ((g_v8_context_runners.empty() && g_v8_value_context_runners.empty() && g_main_thread_runners.empty()) || shimakaze::scheduler::in_context_runner == true)
-    {
-        // run to the game loop if we have no contexts to run
-        CCScheduler_update(self, dt);
-
-        return;
-    }
 
     // run v8 contexts
     for (auto const &func : g_v8_context_runners)
@@ -126,14 +141,6 @@ SHIMAKAZE_CALL_ARGS(CCScheduler_update, CCScheduler *, void, float dt)
 
         // dequeue
         g_v8_context_runners.pop_front();
-    }
-
-    if ((g_v8_context_runners.empty() && g_v8_value_context_runners.empty()) || shimakaze::scheduler::in_context_runner == true)
-    {
-        // run to the game loop if we have no contexts to run
-        CCScheduler_update(self, dt);
-
-        return;
     }
 
     // run v8 contexts under a value

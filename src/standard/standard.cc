@@ -1,5 +1,7 @@
 #include "standard.h"
 
+#include "../bindings/menu_layer.h"
+
 namespace shimakaze
 {
     namespace standard
@@ -44,13 +46,24 @@ namespace shimakaze
         void standard_hook(const v8::FunctionCallbackInfo<v8::Value> &args)
         {
             v8::Isolate *isolate = args.GetIsolate();
-            if (args[0]->IsFunction()) {
-                std::cout << "hi" << std::endl;
-                v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(args[0]);
 
-                v8::String::Utf8Value funcname(isolate, func->GetInferredName());
+            // validate that the first and second argument is a function
+            if (args[0]->IsFunction() && args[1]->IsFunction()) {
+                v8::Local<v8::Function> our_hook = v8::Local<v8::Function>::Cast(args[0]);
+                v8::Local<v8::Function> class_hook = v8::Local<v8::Function>::Cast(args[1]);
 
-                std::cout << bind::to_cstr(funcname) << std::endl;
+                v8::String::Utf8Value funcname(isolate, our_hook->GetName());
+
+                // c++
+                // why no string switch case :c
+                if (bind::to_str(funcname) == "MenuLayer") {
+                    // menu layer bindings
+                    bindings::add_menulayer_hooks(isolate->GetCurrentContext(), our_hook, class_hook);
+                }
+
+                std::cout << std::string(bind::to_cstr(funcname)) << std::endl;
+            } else {
+                std::cout << "Invalid arguments" << std::endl;
             }
         }
     }

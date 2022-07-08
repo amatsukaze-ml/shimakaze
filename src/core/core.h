@@ -10,6 +10,7 @@ namespace shimakaze
     namespace core
     {
         inline v8::Global<v8::Context> g_global_context;
+        inline v8::Isolate* g_isolate;
         inline extern v8::Platform *g_platform = nullptr;
         inline toml::table g_config;
         inline std::deque<toml::table> g_mod_info;

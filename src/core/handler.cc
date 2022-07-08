@@ -407,7 +407,7 @@ namespace shimakaze
                 // this is a very volatile function
                 // undoubtedly, this runs under the assumption that both a .plist and a .png file are present
                 // (sometimes)
-                
+
                 // regardless, get the shared texture cache & sprite frame cache
                 auto texture_cache = CCTextureCache::sharedTextureCache();
                 auto sprite_frame_cache = CCSpriteFrameCache::sharedSpriteFrameCache();
@@ -706,6 +706,48 @@ namespace shimakaze
                 {
                     console::error("Shimakaze", "");
                     console::error("Shimakaze", "No stack trace has been provided.");
+                }
+            }
+
+            std::vector<COPYABLE_PERSISTENT<v8::Function>> get_hook_map(std::map<std::string, std::vector<COPYABLE_PERSISTENT<v8::Function>>> &hook_map, std::string name)
+            {
+                // get the hook map
+                auto it = hook_map.find(name);
+
+                // if it doesn't exist, create it
+                if (it == hook_map.end())
+                {
+                    std::cout << "no exist" << std::endl;
+                    auto vect = std::vector<COPYABLE_PERSISTENT<v8::Function>>();
+
+                    hook_map.insert_or_assign(name, vect);
+
+                    return vect;
+                } else {
+                    return (*it).second;
+                }
+            }
+
+            void add_hook(std::map<std::string, std::vector<COPYABLE_PERSISTENT<v8::Function>>> &hook_map, std::string name, COPYABLE_PERSISTENT<v8::Function> hook)
+            {
+                // get the hook map
+                auto it = hook_map.find(name);
+
+                // if it doesn't exist, create it
+                if (it == hook_map.end())
+                {
+                    std::cout << "no exist create" << std::endl;
+                    auto vect = std::vector<COPYABLE_PERSISTENT<v8::Function>>();
+
+                    vect.insert(vect.end(), hook);
+
+                    hook_map.insert(std::make_pair(name, vect));
+                } else {
+                    auto vect = (*it).second;
+
+                    vect.insert(vect.end(), hook);
+
+                    hook_map.insert_or_assign(name, vect);
                 }
             }
         }
