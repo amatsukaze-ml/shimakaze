@@ -60,8 +60,6 @@ namespace shimakaze
                     // menu layer bindings
                     bindings::add_menulayer_hooks(isolate->GetCurrentContext(), our_hook, class_hook);
                 }
-
-                std::cout << std::string(bind::to_cstr(funcname)) << std::endl;
             } else {
                 std::cout << "Invalid arguments" << std::endl;
             }

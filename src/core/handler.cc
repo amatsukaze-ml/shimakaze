@@ -612,8 +612,6 @@ namespace shimakaze
                     std::make_pair<const char *, COPYABLE_PERSISTENT<v8::Module>>(
                         name.c_str(),
                         COPYABLE_PERSISTENT<v8::Module>(isolate, library)));
-
-                std::cout << "Added library: " << name << std::endl;
             }
 
             void log_exception(v8::Isolate *isolate, v8::TryCatch *try_catch)
@@ -717,7 +715,6 @@ namespace shimakaze
                 // if it doesn't exist, create it
                 if (it == hook_map.end())
                 {
-                    std::cout << "no exist" << std::endl;
                     auto vect = std::vector<COPYABLE_PERSISTENT<v8::Function>>();
 
                     hook_map.insert_or_assign(name, vect);
@@ -736,7 +733,6 @@ namespace shimakaze
                 // if it doesn't exist, create it
                 if (it == hook_map.end())
                 {
-                    std::cout << "no exist create" << std::endl;
                     auto vect = std::vector<COPYABLE_PERSISTENT<v8::Function>>();
 
                     vect.insert(vect.end(), hook);

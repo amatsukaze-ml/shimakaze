@@ -34,7 +34,6 @@ namespace shimakaze
 
                             // add the child
                             CCSprite* child = static_cast<CCSprite *>(obj_ptr);
-                            std::cout << child->getTextureRect().getMinX() << std::endl;
                             bruh->addChild(child);
                         }
                     }));
@@ -62,7 +61,6 @@ namespace shimakaze
                 v8::Local<v8::Function> init_func = v8::Local<v8::Function>::Cast(function->Get(context, bind::to_v8(context->GetIsolate(), "init")).ToLocalChecked());
 
                 // add hook
-                std::cout << "ADD HOOK" << std::endl;
                 scheduler::add_hook_on_main_thread("menulayer", "init", COPYABLE_PERSISTENT<v8::Function>(context->GetIsolate(), init_func));
             }
         }

@@ -113,7 +113,6 @@ SHIMAKAZE_CALL_ARGS(CCScheduler_update, CCScheduler *, void, float dt)
 
     for (auto const &runner : g_main_thread_runners)
     {
-        std::cout << "real" << std::endl;
         runner();
 
         // dequeue

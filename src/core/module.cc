@@ -15,8 +15,6 @@ namespace shimakaze
             // get the specifier name
             v8::String::Utf8Value specifier_name(context->GetIsolate(), specifier);
 
-            std::cout << "dynamic_call: " << bind::to_cstr(specifier_name) << std::endl;
-
             promise_resolver->Resolve(context, specifier);
             return promise;
         }
@@ -25,9 +23,6 @@ namespace shimakaze
         {
             v8::String::Utf8Value specifier_name(context->GetIsolate(), specifier);
             const char* specifier_name_cstr = bind::to_cstr(specifier_name);
-
-            std::cout << "static_call: " << specifier_name_cstr << std::endl;
-            std::cout << "static_call: " << core::handler::g_libraries.size() << std::endl;
 
             // check standard libraries first
             auto standard_call = core::handler::g_libraries.find(specifier_name_cstr);
