@@ -54,6 +54,8 @@ BOOL APIENTRY DllMain(
         freopen_s(&fDummy, "CONIN$", "r", stdin);
         freopen_s(&fDummy, "CONOUT$", "w", stderr);
         freopen_s(&fDummy, "CONOUT$", "w", stdout);
+
+        SetConsoleTitle("shimakaze");
     }
 
     if (ul_reason == DLL_PROCESS_ATTACH)
