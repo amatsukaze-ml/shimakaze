@@ -53,14 +53,14 @@ namespace shimakaze
             icon_border->setScale(1.175f);
             icon_border->setAnchorPoint({0.0f, 0.0f});
             icon_border->setPosition({18.5f, (this->m_fHeight / 2) - 24.5f});
-            icon_border->setZOrder(1);
 
-            icon->setScaleX((icon_border->getContentSize().width / icon->getContentSize().width) - 0.015f);
-            icon->setScaleY((icon_border->getContentSize().height / icon->getContentSize().height) - 0.015f);
-            icon->setPosition({icon_border->getContentSize().width / 2, icon_border->getContentSize().height / 2});
+            // laica code no tocuhy
+            const float icon_scalar = 1.1f;
+            icon->setScaleX((icon_border->getContentSize().width / icon->getContentSize().width) * icon_scalar);
+            icon->setScaleY((icon_border->getContentSize().height / icon->getContentSize().height) * icon_scalar);
+            icon->setPosition({ icon_border->getContentSize().width / 2 + 0.025f, icon_border->getContentSize().height / 2 + 2.0f });
 
-            icon->setAnchorPoint({0.5f, 0.5f});
-            icon->setZOrder(2);
+            icon->setAnchorPoint({ 0.0f, 0.0f });
 
             // add icon as child
 
