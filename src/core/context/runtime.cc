@@ -48,9 +48,6 @@ namespace shimakaze::context
 
     std::string get_logger_string(const v8::FunctionCallbackInfo<v8::Value> &args) {
         v8::Isolate* isolate = args.GetIsolate();
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-        v8::String::Utf8Value mod_name(isolate, v8::Local<v8::String>::Cast(context->GetEmbedderData(0)));
 
         bool isFirst = true;
         std::string result = "";
