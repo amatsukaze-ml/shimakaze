@@ -9,30 +9,13 @@
 
 #include <format>
 
-namespace shimakaze
+namespace shimakaze::menu
 {
-    namespace menu
+    void update_mod_count(std::size_t count)
     {
-        void update_mod_count(std::size_t count)
-        {
-            std::string modCount = std::format("{} mods loaded", count);
-            mod_count_label->setString(modCount.c_str());
-        }
+        std::string modCount = std::format("{} mods loaded", count);
+        mod_count_label->setString(modCount.c_str());
     }
-}
-template <class T = cocos2d::CCNode *>
-static T getChild(cocos2d::CCNode *x, int i)
-{
-    // start from end for negative index
-    if (i < 0)
-        i = x->getChildrenCount() + i;
-    // check if backwards index is out of bounds
-    if (i < 0)
-        return nullptr;
-    // check if forwards index is out of bounds
-    if (static_cast<int>(x->getChildrenCount()) <= i)
-        return nullptr;
-    return reinterpret_cast<T>(x->getChildren()->objectAtIndex(i));
 }
 
 SHIMAKAZE_CALL(MenuLayer_init, CCLayer *, bool)

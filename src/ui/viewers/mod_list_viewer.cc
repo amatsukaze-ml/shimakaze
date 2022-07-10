@@ -6,64 +6,61 @@
 
 #include "../../core/handler.h"
 
-namespace shimakaze
+namespace shimakaze::ui
 {
-    namespace ui
+    ModListViewer *ModListViewer::create()
     {
-        ModListViewer *ModListViewer::create()
+        ModListViewer *viewer = new ModListViewer();
+
+        // create mod view
+
+        if (viewer && viewer->init())
         {
-            ModListViewer *viewer = new ModListViewer();
+            viewer->autorelease();
 
-            // create mod view
+            return viewer;
+        }
+        else
+        {
+            CC_SAFE_DELETE(viewer);
 
-            if (viewer && viewer->init())
-            {
-                viewer->autorelease();
+            return nullptr;
+        }
+    }
 
-                return viewer;
-            }
-            else
-            {
-                CC_SAFE_DELETE(viewer);
+    bool ModListViewer::init() {
+        // size of screen
+        CCSize size = CCDirector::sharedDirector()->getWinSize();
 
-                return nullptr;
-            }
+        CCArray *ccMods = CCArray::create();
+
+        for (const auto &mod : core::handler::g_mod_map)
+        {
+            ccMods->addObject(ModObject::create(mod.second));
         }
 
-        bool ModListViewer::init() {
-            // size of screen
-            CCSize size = CCDirector::sharedDirector()->getWinSize();
+        ModListView *view = ModListView::create(ccMods, gd::BoomListType::kBoomListTypeDefault, {356.0f, 220.0f});
 
-            CCArray *ccMods = CCArray::create();
+        // create list layer
+        this->list_layer = gd::GJListLayer::create(view, "Mods", {0, 0, 0, 180}, 356.0f, 220.0f);
 
-            for (const auto &mod : core::handler::g_mod_map)
-            {
-                ccMods->addObject(ModObject::create(mod.second));
-            }
+        this->list_layer->setPosition(size / 2.0f - this->list_layer->getScaledContentSize() / 2.0f);
+        this->list_layer->setAnchorPoint({ 0.5f, 0.5f });
 
-            ModListView *view = ModListView::create(ccMods, gd::BoomListType::kBoomListTypeDefault, {356.0f, 220.0f});
+        this->addChild(this->list_layer);
 
-            // create list layer
-            this->list_layer = gd::GJListLayer::create(view, "Mods", {0, 0, 0, 180}, 356.0f, 220.0f);
+        // add a message stating that there are no mods installed
+        if (core::handler::g_mod_map.empty())
+        {
+            CCLabelBMFont* label = CCLabelBMFont::create("No mods are installed.", "bigFont.fnt");
+            label->setPosition(this->list_layer->getScaledContentSize() / 2);
+            label->setAnchorPoint({ 0.5f, 0.5f });
+            label->setScale(0.75f);
 
-            this->list_layer->setPosition(size / 2.0f - this->list_layer->getScaledContentSize() / 2.0f);
-            this->list_layer->setAnchorPoint({ 0.5f, 0.5f });
-
-            this->addChild(this->list_layer);
-
-            // add a message stating that there are no mods installed
-            if (core::handler::g_mod_map.empty())
-            {
-                CCLabelBMFont* label = CCLabelBMFont::create("No mods are installed.", "bigFont.fnt");
-                label->setPosition(this->list_layer->getScaledContentSize() / 2);
-                label->setAnchorPoint({ 0.5f, 0.5f });
-                label->setScale(0.75f);
-
-                this->list_layer->addChild(label);
-            }
-
-            // return self init
-            return true;
+            this->list_layer->addChild(label);
         }
+
+        // return self init
+        return true;
     }
 }

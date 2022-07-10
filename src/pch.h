@@ -56,6 +56,21 @@ T1& from_offset(T2 object, unsigned int offset) {
     return *reinterpret_cast<T1*>(reinterpret_cast<uintptr_t>(object) + offset);
 }
 
+template <class T = cocos2d::CCNode *>
+static T getChild(cocos2d::CCNode *x, int i)
+{
+    // start from end for negative index
+    if (i < 0)
+        i = x->getChildrenCount() + i;
+    // check if backwards index is out of bounds
+    if (i < 0)
+        return nullptr;
+    // check if forwards index is out of bounds
+    if (static_cast<int>(x->getChildrenCount()) <= i)
+        return nullptr;
+    return reinterpret_cast<T>(x->getChildren()->objectAtIndex(i));
+}
+
 /// CONFIG SECTION
 
 #define SHIMAKAZE_VERSION "0.1.0-RC.1"

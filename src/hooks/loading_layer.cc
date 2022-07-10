@@ -5,28 +5,25 @@
 #include <thread>
 #include <chrono>
 
-namespace shimakaze
+namespace shimakaze::loading
 {
-    namespace loading
+    void update_progress(float max_number, float current_number)
     {
-        void update_progress(float max_number, float current_number)
-        {
-            progress_bar->setTextureRect(CCRect(0, 0, (current_number / max_number) * (progress_bar_base_size.width - 5.0f), progress_bar->getContentSize().height));
-        }
-        
-        void update_progress_text(const char *text)
-        {
-            progress_label->setString(text);
-        }
+        progress_bar->setTextureRect(CCRect(0, 0, (current_number / max_number) * (progress_bar_base_size.width - 5.0f), progress_bar->getContentSize().height));
+    }
 
-        void replace_to_menu_layer()
-        {
-            // manifest a menu layer
-            CCScene* menu_layer = gd::MenuLayer::scene(false);
+    void update_progress_text(const char *text)
+    {
+        progress_label->setString(text);
+    }
 
-            // replace current scene with it
-            CCDirector::sharedDirector()->replaceScene(menu_layer);
-        }
+    void replace_to_menu_layer()
+    {
+        // manifest a menu layer
+        CCScene* menu_layer = gd::MenuLayer::scene(false);
+
+        // replace current scene with it
+        CCDirector::sharedDirector()->replaceScene(menu_layer);
     }
 }
 

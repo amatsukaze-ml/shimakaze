@@ -17,71 +17,68 @@ std::deque<std::tuple<v8::Isolate *, v8::Local<v8::Value>, std::function<void(v8
 std::deque<std::function<void()>> g_main_thread_runners;
 std::deque<std::tuple<std::string, std::string, COPYABLE_PERSISTENT<v8::Function>>> g_add_hook_runners;
 
-namespace shimakaze
+namespace shimakaze::scheduler
 {
-    namespace scheduler
+    void run_on_main_thread(std::function<void()> func)
     {
-        void run_on_main_thread(std::function<void()> func)
-        {
-            g_main_thread_runners.push_back(func);
-        }
-
-        void add_hook_on_main_thread(std::string hook_map, std::string name, COPYABLE_PERSISTENT<v8::Function> hook)
-        {
-            g_add_hook_runners.push_back(std::make_tuple(hook_map, name, hook));
-        }
-
-        void run_under_context(v8::Isolate *isolate, std::string script, std::function<void(std::string, v8::Local<v8::Context>)> func)
-        {
-            g_v8_context_runners.push_back(std::make_tuple(isolate, script, func));
-        }
-
-        void run_value_under_context(v8::Isolate *isolate, v8::Local<v8::Value> value, std::function<void(v8::Local<v8::Value>, v8::Local<v8::Context>)> func)
-        {
-            g_v8_value_context_runners.push_back(std::make_tuple(isolate, value, func));
-        }
-
-        void run_context_function(v8::Isolate *isolate, std::string script, std::function<void(std::string, v8::Local<v8::Context>)> func)
-        {
-            in_context_runner = true;
-
-            // create a context under this thread
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolate_scope(isolate);
-            v8::HandleScope handle_scope(isolate);
-
-            v8::Local<v8::Context> context = v8::Local<v8::Context>::New(isolate, core::g_global_context);
-
-            // run function after thoroughly locking the current isolate to the thread
-            func(script, context);
-
-            // we're done
-            v8::Unlocker unlocker(isolate);
-
-            in_context_runner = false;
-        }
-
-        void run_value_context_function(v8::Isolate *isolate, v8::Local<v8::Value> value, std::function<void(v8::Local<v8::Value>, v8::Local<v8::Context>)> func)
-        {
-            in_context_runner = true;
-
-            // create a context under this thread
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolate_scope(isolate);
-            v8::HandleScope handle_scope(isolate);
-
-            v8::Local<v8::Context> context = v8::Local<v8::Context>::New(isolate, core::g_global_context);
-
-            // run function after thoroughly locking the current isolate to the thread
-            func(value, context);
-
-            // we're done
-            v8::Unlocker unlocker(isolate);
-
-            in_context_runner = false;
-        }
-
+        g_main_thread_runners.push_back(func);
     }
+
+    void add_hook_on_main_thread(std::string hook_map, std::string name, COPYABLE_PERSISTENT<v8::Function> hook)
+    {
+        g_add_hook_runners.push_back(std::make_tuple(hook_map, name, hook));
+    }
+
+    void run_under_context(v8::Isolate *isolate, std::string script, std::function<void(std::string, v8::Local<v8::Context>)> func)
+    {
+        g_v8_context_runners.push_back(std::make_tuple(isolate, script, func));
+    }
+
+    void run_value_under_context(v8::Isolate *isolate, v8::Local<v8::Value> value, std::function<void(v8::Local<v8::Value>, v8::Local<v8::Context>)> func)
+    {
+        g_v8_value_context_runners.push_back(std::make_tuple(isolate, value, func));
+    }
+
+    void run_context_function(v8::Isolate *isolate, std::string script, std::function<void(std::string, v8::Local<v8::Context>)> func)
+    {
+        in_context_runner = true;
+
+        // create a context under this thread
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+
+        v8::Local<v8::Context> context = v8::Local<v8::Context>::New(isolate, core::g_global_context);
+
+        // run function after thoroughly locking the current isolate to the thread
+        func(script, context);
+
+        // we're done
+        v8::Unlocker unlocker(isolate);
+
+        in_context_runner = false;
+    }
+
+    void run_value_context_function(v8::Isolate *isolate, v8::Local<v8::Value> value, std::function<void(v8::Local<v8::Value>, v8::Local<v8::Context>)> func)
+    {
+        in_context_runner = true;
+
+        // create a context under this thread
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+
+        v8::Local<v8::Context> context = v8::Local<v8::Context>::New(isolate, core::g_global_context);
+
+        // run function after thoroughly locking the current isolate to the thread
+        func(value, context);
+
+        // we're done
+        v8::Unlocker unlocker(isolate);
+
+        in_context_runner = false;
+    }
+
 }
 
 SHIMAKAZE_CALL_ARGS(CCScheduler_update, CCScheduler *, void, float dt)
