@@ -16,6 +16,7 @@ namespace shimakaze
         inline std::deque<toml::table> g_mod_info;
         inline int g_mod_count;
         inline int g_mod_loaded_count;
+        inline bool g_started = false;
 
         void start();
         void dispose(v8::Isolate *isolate);

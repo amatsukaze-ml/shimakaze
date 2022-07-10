@@ -34,6 +34,11 @@ namespace shimakaze
     {
         void start()
         {
+            if (g_started) {
+                shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
+                return;
+            }
+
             // we're creating an arbitrary progress limit for the progress bar
             float arbitrary_limit = 5.0f;
 
@@ -138,6 +143,7 @@ namespace shimakaze
 
             // run the loop under a new thread
             g_mod_loaded_count = 0;
+            g_started = true;
             handler::run_mod_set(isolate, starting_mod_files);
         }
 
