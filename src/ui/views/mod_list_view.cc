@@ -1,6 +1,6 @@
 #include "mod_list_view.h"
 
-#include "mod_cell.h"
+#include "../cells/mod_cell.h"
 
 namespace shimakaze {
     namespace ui {
@@ -75,8 +75,11 @@ namespace shimakaze {
             std::cout << "hi owo" << std::endl;
 
             modCell->setIndex(index);
+            std::cout << "hi owo1" << std::endl;
             modCell->setupObjectData(object);
+            std::cout << "hi owo2" << std::endl;
             modCell->updateBGColor();
+            std::cout << "hi owo3" << std::endl;
         }
     }
 }

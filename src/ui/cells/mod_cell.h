@@ -2,7 +2,7 @@
 
 #include "../../pch.h"
 
-#include "shimakaze_cell.h"
+#include "../views/shimakaze_cell.h"
 
 #include "../objects/mod_object.h"
 
