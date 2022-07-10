@@ -4,6 +4,8 @@
 
 #include "core.h"
 
+#include "mods/mod_entry.h"
+
 #include <map>
 #include <vector>
 #include <tuple>
@@ -15,7 +17,7 @@ namespace shimakaze
     {
         namespace handler
         {
-            inline std::map<std::string, std::tuple<toml::table, COPYABLE_PERSISTENT<v8::Module>>> g_mod_map;
+            inline std::map<std::string, ModEntry*> g_mod_map;
             inline std::map<std::string, COPYABLE_PERSISTENT<v8::Module>> g_libraries;
             inline std::map<std::string, toml::table> g_mod_config_map;
 

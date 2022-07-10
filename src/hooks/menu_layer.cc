@@ -5,6 +5,8 @@
 
 #include "../bindings/menu_layer.h"
 
+#include "../ui/mod_list_layer.h"
+
 #include <format>
 
 namespace shimakaze
@@ -17,6 +19,20 @@ namespace shimakaze
             mod_count_label->setString(modCount.c_str());
         }
     }
+}
+template <class T = cocos2d::CCNode *>
+static T getChild(cocos2d::CCNode *x, int i)
+{
+    // start from end for negative index
+    if (i < 0)
+        i = x->getChildrenCount() + i;
+    // check if backwards index is out of bounds
+    if (i < 0)
+        return nullptr;
+    // check if forwards index is out of bounds
+    if (static_cast<int>(x->getChildrenCount()) <= i)
+        return nullptr;
+    return reinterpret_cast<T>(x->getChildren()->objectAtIndex(i));
 }
 
 SHIMAKAZE_CALL(MenuLayer_init, CCLayer *, bool)
@@ -48,7 +64,7 @@ SHIMAKAZE_CALL(MenuLayer_init, CCLayer *, bool)
     self->addChild(mod_count_label);
 
     // run hooks
-    v8::Isolate* isolate = shimakaze::core::g_isolate;
+    v8::Isolate *isolate = shimakaze::core::g_isolate;
     auto init_hooks = shimakaze::core::handler::get_hook_map(shimakaze::menu::menulayer_hooks, "init");
 
     for (auto &hook : init_hooks)
@@ -60,20 +76,31 @@ SHIMAKAZE_CALL(MenuLayer_init, CCLayer *, bool)
 
         v8::Local<v8::Context> context = v8::Local<v8::Context>::New(isolate, shimakaze::core::g_global_context);
         // convert to local
-        
+
         v8::Local<v8::Function> func = v8::Local<v8::Function>::New(isolate, hook);
         // cast menulayer to functiontemplate
         v8::Local<v8::FunctionTemplate> menulayer_cast = shimakaze::bindings::cast_menulayer(isolate, self);
 
         v8::Local<v8::Value> argv[] = {
-            menulayer_cast->GetFunction(context).ToLocalChecked()
-        };
+            menulayer_cast->GetFunction(context).ToLocalChecked()};
 
         func->Call(context, func, 1, argv);
 
         // we're done
         v8::Unlocker unlocker(isolate);
     }
+
+    // stinky alert
+    CCMenu *bottom_menu = getChild<CCMenu *>(self, 3);
+
+    // add mod button
+    gd::CCMenuItemSpriteExtra *mod_menu_button = gd::CCMenuItemSpriteExtra::create(
+        CCSprite::create("GJ_button_01.png"),
+        self,
+        menu_selector(shimakaze::ui::ModListLayer::onModButtonPress));
+
+    bottom_menu->addChild(mod_menu_button);
+    bottom_menu->alignItemsHorizontallyWithPadding(5.0f);
 
     return true;
 }

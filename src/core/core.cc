@@ -24,16 +24,31 @@ const auto shimakaze_path = base_path / "shimakaze";
 const auto shimakaze_mods_path = shimakaze_path / "mods";
 const auto shimakaze_config_path = shimakaze_path / "shimakaze.toml";
 
+// temp folders
+const auto shimakaze_temp_path = shimakaze_path / ".temp";
+const auto shimakaze_temp_images_path = shimakaze_temp_path / "images";
+
 namespace shimakaze
 {
     namespace core
     {
         void start()
         {
-            shimakaze::loading::update_progress_text("Setup: Starting v8 Engine...");
-
             // we're creating an arbitrary progress limit for the progress bar
-            float arbitrary_limit = 4.0f;
+            float arbitrary_limit = 5.0f;
+
+            shimakaze::loading::update_progress_text("Setup: Loading Resources...");
+            shimakaze::loading::update_progress(arbitrary_limit, 1.0f);
+
+            // get texture & sprite frame cache
+            auto texture_cache = CCTextureCache::sharedTextureCache();
+            auto sprite_frame_cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+
+            // load textures
+            texture_cache->addImage("shimakaze-GameSheet01.png", false);
+            sprite_frame_cache->addSpriteFramesWithFile("shimakaze-GameSheet01.plist");
+
+            shimakaze::loading::update_progress_text("Setup: Starting v8 Engine...");
 
             // create a platform for v8
             std::unique_ptr<v8::Platform> platform = v8::platform::NewDefaultPlatform();
@@ -43,7 +58,7 @@ namespace shimakaze
             v8::V8::Initialize();
 
             shimakaze::loading::update_progress_text("Setup: Creating v8 Environment...");
-            shimakaze::loading::update_progress(arbitrary_limit, 1.0f);
+            shimakaze::loading::update_progress(arbitrary_limit, 2.0f);
 
             // create a v8 isolate environment
             v8::Isolate::CreateParams create_params;
@@ -60,7 +75,7 @@ namespace shimakaze
             v8::HandleScope handle_scope(isolate);
 
             shimakaze::loading::update_progress_text("Setup: Creating v8 Context...");
-            shimakaze::loading::update_progress(arbitrary_limit, 2.0f);
+            shimakaze::loading::update_progress(arbitrary_limit, 3.0f);
 
             // create a main context for the isolate
             v8::Local<v8::Context> main_context = create_main_context(isolate);
@@ -87,7 +102,13 @@ namespace shimakaze
 
             /// STANDARD LIBRARY SECTION END
             shimakaze::loading::update_progress_text("Setup: Precalculating amount of mods...");
-            shimakaze::loading::update_progress(arbitrary_limit, 3.0f);
+            shimakaze::loading::update_progress(arbitrary_limit, 4.0f);
+
+            // set temp image as search path for cocos
+            CCFileUtils *fileUtils = CCFileUtils::sharedFileUtils();
+            std::vector<std::string> searchPaths = fileUtils->getSearchPaths();
+            searchPaths.insert(searchPaths.begin(), shimakaze_temp_images_path.string());
+            fileUtils->setSearchPaths(searchPaths);
 
             /// MODLOADER SECTION START
             std::vector<std::filesystem::path> starting_mod_files;
@@ -230,21 +251,32 @@ namespace shimakaze
             // assert the shimakaze directory exists
             if (!std::filesystem::is_directory(shimakaze_path))
             {
-                // create it since it doesn't
                 std::filesystem::create_directory(shimakaze_path);
             }
 
             // assert the mods directory exists
             if (!std::filesystem::is_directory(shimakaze_mods_path))
             {
-                // create it since it also doesn't
                 std::filesystem::create_directory(shimakaze_mods_path);
+            }
+
+            // assert temp folder exists
+            if (!std::filesystem::is_directory(shimakaze_temp_path))
+            {
+                std::filesystem::create_directory(shimakaze_temp_path);
+            }
+            else
+            {
+                // assert temp folders exist
+                if (!std::filesystem::is_directory(shimakaze_temp_images_path))
+                {
+                    std::filesystem::create_directory(shimakaze_temp_images_path);
+                }
             }
 
             // assert the config file exists
             if (!std::filesystem::is_regular_file(shimakaze_config_path))
             {
-                // create it since it also doesn't
                 std::ofstream config_file(shimakaze_config_path.c_str());
 
                 config_file << toml::toml_formatter{default_config};

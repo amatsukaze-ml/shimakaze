@@ -15,6 +15,16 @@ std::vector<std::string> loaded_modIds;
 std::vector<std::string> loading_modIds;
 std::vector<std::string> duplicate_modIds;
 
+// folders
+const auto base_path = std::filesystem::current_path();
+const auto shimakaze_path = base_path / "shimakaze";
+const auto shimakaze_mods_path = shimakaze_path / "mods";
+const auto shimakaze_config_path = shimakaze_path / "shimakaze.toml";
+
+// temp folders
+const auto shimakaze_temp_path = shimakaze_path / ".temp";
+const auto shimakaze_temp_images_path = shimakaze_temp_path / "images";
+
 namespace shimakaze
 {
     namespace core
@@ -86,9 +96,9 @@ namespace shimakaze
                     return toml::table{};
                 }
 
-                toml::table *modInfoTable = mod_config["mod.info"].as_table();
+                toml::table *modInfoTable = mod_config["mod"]["info"].as_table();
 
-                if (modInfoTable)
+                if (!modInfoTable)
                 {
                     console::error("Shimakaze", std::format("There was a problem starting the \"{}\" mod.", *modId).c_str());
                     console::error("Shimakaze", "The mod's information table was missing.");
@@ -140,10 +150,13 @@ namespace shimakaze
                         toml::table mod_config = handler::read_mod_config_file(toml_path);
 
                         std::optional<std::string> mod_id = mod_config["mod"]["mod_id"].value<std::string>();
-                        std::optional<std::string> mod_name = mod_config["mod.info"]["display_name"].value<std::string>();
+                        std::optional<std::string> mod_name = mod_config["mod"]["info"]["display_name"].value<std::string>();
 
                         if (!mod_id)
                         {
+                            // decrease mod count as this one is invalid
+                            shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
+
                             continue;
                         }
 
@@ -252,6 +265,9 @@ namespace shimakaze
                                 std::vector<std::filesystem::path> resources_png;
                                 std::vector<std::string> loaded_resources;
 
+                                bool icon_loaded = false;
+                                std::optional<std::string> mod_icon = mod_config["mod"]["info"]["icon"].value<std::string>();
+
                                 for (const auto &entry : std::filesystem::directory_iterator(resource_folder_path))
                                 {
                                     auto loadedit = std::find(loaded_resources.begin(), loaded_resources.end(), entry.path().stem().string());
@@ -259,6 +275,36 @@ namespace shimakaze
                                     {
                                         // unknown
                                         continue;
+                                    }
+
+                                    // ignore icons
+                                    if (!icon_loaded && mod_icon)
+                                    {
+                                        if (entry.path().filename() == std::filesystem::path(*mod_icon))
+                                        {
+                                            console::debug_if("Shimakaze", std::format("Icon for mod \"{}\" was found. Moving to temp directory...", *mod_id).c_str(), show_debug);
+                                            // set icon as loaded
+                                            icon_loaded = true;
+
+                                            // move icon to temp images folder
+                                            std::filesystem::path icon_path = shimakaze_temp_images_path / std::filesystem::path(std::format("{}-icon.png", *mod_id));
+                                            std::ifstream source(entry.path(), std::ios::binary);
+                                            std::ofstream dest(icon_path, std::ios::binary);
+
+                                            dest << source.rdbuf();
+
+                                            // close streams
+                                            source.close();
+                                            dest.close();
+
+                                            // get texture cache
+                                            auto texture_cache = CCTextureCache::sharedTextureCache();
+
+                                            // load icon
+                                            texture_cache->addImage(icon_path.string().c_str(), false);
+
+                                            continue;
+                                        }
                                     }
 
                                     if (entry.path().extension() == ".plist")
@@ -394,6 +440,15 @@ namespace shimakaze
                     }
                 }
 
+                if (shimakaze::core::g_mod_count == shimakaze::core::g_mod_loaded_count)
+                {
+                    // its impossible for it to NOT be equal now
+                    shimakaze::core::g_mod_count = g_mod_map.size();
+
+                    // we can now start the game
+                    shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
+                }
+
                 if (remaining_mods_files.size() > 0)
                 {
                     // we have some mods that have dependencies that are not loaded
@@ -437,9 +492,9 @@ namespace shimakaze
 
                 // save important mod info
                 std::optional<std::string> mod_id = mod_config["mod"]["id"].value<std::string>();
-                std::optional<std::string> mod_name = mod_config["mod.info"]["display_name"].value<std::string>();
+                std::optional<std::string> mod_name = mod_config["mod"]["info"]["display_name"].value<std::string>();
                 toml::table *mod_table = mod_config["mod"].as_table();
-                toml::table *mod_info_table = mod_config["mod.info"].as_table();
+                toml::table *mod_info_table = mod_config["mod"]["info"].as_table();
 
                 /// MODLOADER RUN FILE LOGIC START
                 // get the current isolate from the scope
@@ -592,11 +647,10 @@ namespace shimakaze
                 std::optional<std::string> mod_id = mod_config["mod"]["mod_id"].value<std::string>();
 
                 g_mod_map.insert(
-                    std::make_pair<const char *, std::tuple<toml::table, COPYABLE_PERSISTENT<v8::Module>>>(
+                    std::make_pair<const char *, ModEntry *>(
                         (*mod_id).c_str(),
-                        std::make_tuple(
-                            mod_config,
-                            COPYABLE_PERSISTENT<v8::Module>(isolate, result))));
+                        new ModEntry(mod_config,
+                                     COPYABLE_PERSISTENT<v8::Module>(isolate, result))));
 
                 // update count
                 shimakaze::core::g_mod_loaded_count = shimakaze::core::g_mod_loaded_count + 1;
@@ -720,7 +774,9 @@ namespace shimakaze
                     hook_map.insert_or_assign(name, vect);
 
                     return vect;
-                } else {
+                }
+                else
+                {
                     return (*it).second;
                 }
             }
@@ -738,7 +794,9 @@ namespace shimakaze
                     vect.insert(vect.end(), hook);
 
                     hook_map.insert(std::make_pair(name, vect));
-                } else {
+                }
+                else
+                {
                     auto vect = (*it).second;
 
                     vect.insert(vect.end(), hook);
