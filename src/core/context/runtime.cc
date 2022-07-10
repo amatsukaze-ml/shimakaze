@@ -38,11 +38,75 @@ namespace shimakaze::context
 
     }
 
+    char* get_mod_name(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate* isolate = args.GetIsolate();
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        v8::String::Utf8Value mod_name(isolate, v8::Local<v8::String>::Cast(context->GetEmbedderData(0)));
+
+        return *mod_name;
+    }
+
+    std::string get_logger_string(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate* isolate = args.GetIsolate();
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+        v8::String::Utf8Value mod_name(isolate, v8::Local<v8::String>::Cast(context->GetEmbedderData(0)));
+
+        bool isFirst = true;
+        std::string result = "";
+
+        for (int i = 0; i < args.Length(); ++i) {
+            if (isFirst)
+                isFirst = false;
+            else
+                result += " ";
+
+            v8::String::Utf8Value arg(isolate, v8::Local<v8::String>::Cast(args[i]));
+            result += bind::to_str(arg);
+        }
+        return result;
+    }
+
+    void logger_debug(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        shimakaze::console::debug(get_mod_name(args), get_logger_string(args).c_str());
+    }
+
+    void logger_info(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        shimakaze::console::info(get_mod_name(args), get_logger_string(args).c_str());
+    }
+
+    void logger_warn(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        shimakaze::console::warn(get_mod_name(args), get_logger_string(args).c_str());
+    }
+
+    void logger_error(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        shimakaze::console::error(get_mod_name(args), get_logger_string(args).c_str());
+    }
+
+    void logger_fatal(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        shimakaze::console::fatal(get_mod_name(args), get_logger_string(args).c_str());
+    }
+
+    void logger_severe(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        shimakaze::console::severe(get_mod_name(args), get_logger_string(args).c_str());
+    }
+
     // create runtime
     void create_common_runtime(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> global)
     {
         // include()
         global->Set(isolate, "require", v8::FunctionTemplate::New(isolate, &common_include));
+
+        // create console object
+        auto console_object = v8::ObjectTemplate::New(isolate);
+        console_object->Set(isolate, "debug", v8::FunctionTemplate::New(isolate, &logger_debug));
+        console_object->Set(isolate, "info", v8::FunctionTemplate::New(isolate, &logger_info));
+        console_object->Set(isolate, "warn", v8::FunctionTemplate::New(isolate, &logger_warn));
+        console_object->Set(isolate, "error", v8::FunctionTemplate::New(isolate, &logger_error));
+        console_object->Set(isolate, "fatal", v8::FunctionTemplate::New(isolate, &logger_fatal));
+        console_object->Set(isolate, "severe", v8::FunctionTemplate::New(isolate, &logger_severe));
+
+        global->Set(isolate, "logger", console_object);
 
         return;
     }

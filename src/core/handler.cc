@@ -557,6 +557,11 @@ namespace shimakaze::core::handler
 
                 // woah a mod
                 v8::Maybe<bool> result = mod->InstantiateModule(context, module::static_call);
+                context->SetEmbedderData(0, mod_id);
+
+                if (mod_name) {
+                    context->SetEmbedderData(0, bind::to_v8(isolate, *mod_name));
+                }
 
                 if (result.IsNothing())
                 {
