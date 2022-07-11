@@ -432,8 +432,14 @@ namespace shimakaze::core::handler
                 console::debug_if("Shimakaze", "Running mod file", show_debug);
 
                 // woah a mod
-                v8::Maybe<bool> result = mod->InstantiateModule(context, module::static_call);
                 context->SetEmbedderData(0, mod_id);
+                context->SetEmbedderData(1, bind::to_v8(isolate, mod_config["__temp_mod_path"].ref<std::string>()));
+
+                if (mod_name)
+                {
+                    context->SetEmbedderData(0, bind::to_v8(isolate, *mod_name));
+                }
+                v8::Maybe<bool> result = mod->InstantiateModule(context, module::static_call);
 
                 if (mod_name)
                 {
