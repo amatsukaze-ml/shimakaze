@@ -33,6 +33,21 @@ namespace shimakaze::core
     void start()
     {
         if (g_started) {
+            // get texture & sprite frame cache
+            auto texture_cache = CCTextureCache::sharedTextureCache();
+            auto sprite_frame_cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+
+            // load textures
+            texture_cache->addImage("shimakaze-GameSheet01.png", false);
+            sprite_frame_cache->addSpriteFramesWithFile("shimakaze-GameSheet01.plist");
+
+            // Just refresh the texture resolutions to whatever the user picked.
+            for (const auto &mod : core::handler::g_mod_map)
+            {
+                auto entry = mod.second;
+                entry->refresh_resources();
+            }
+
             shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
             return;
         }

@@ -258,6 +258,8 @@ namespace shimakaze::core::handler
             return true;
         }
 
+        mod_config.insert("__temp_mod_path", mod_path.string());
+
         // attempt to read mod dependencies
         auto mod_dependencies_view = mod_config["mod"]["dependencies"];
 
@@ -583,7 +585,9 @@ namespace shimakaze::core::handler
                             // get texture cache
                             auto texture_cache = CCTextureCache::sharedTextureCache();
 
+                            // TODO: https://discord.com/channels/993695985580654742/993704576123408475/995865751082770462
                             // load icon
+                            texture_cache->removeTextureForKey(icon_path.string().c_str()); // just in case.
                             texture_cache->addImage(icon_path.string().c_str(), false);
 
                             continue;
