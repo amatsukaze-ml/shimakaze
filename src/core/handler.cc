@@ -106,44 +106,42 @@ namespace shimakaze::core::handler
         return mod_config;
     }
 
-    void run_mod_set(v8::Isolate *isolate, std::vector<std::filesystem::path> mods)
+    void run_mod_set(v8::Isolate *isolate, std::vector<std::filesystem::path> mod_paths)
     {
-        std::vector<std::filesystem::path> remaining_mods_files;
-        toml::table *shimakaze_main = g_config["main"].as_table();
-        bool show_debug = shimakaze_main->get("show_debug")->value_or(true);
+        bool show_debug = g_config["main"]["show_debug"].ref<bool>();
 
-        if (scheduler::in_context_runner == true)
+        // wait until context runner is done
+        while (scheduler::in_context_runner == true)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+            if (scheduler::in_context_runner == false)
+            {
+                break;
+            }
+
+            // sleep
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
         // update progress bar
         shimakaze::loading::update_progress((float)shimakaze::core::g_mod_count, (float)shimakaze::core::g_mod_loaded_count);
 
-        if (shimakaze::core::g_mod_count == shimakaze::core::g_mod_loaded_count)
+        // mod_id, mod_path
+        std::map<std::string, std::tuple<std::filesystem::path, toml::table>> valid_mod_paths;
+
+        for (const auto mod_path : mod_paths)
         {
-            // its impossible for it to NOT be equal now
-            shimakaze::core::g_mod_count = g_mod_map.size();
+            console::debug_if("Shimakaze", std::format("Reading potential item at \"{}\"", mod_path.string()).c_str(), show_debug);
 
-            // we can now start the game
-            shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
-        }
-
-        for (const std::filesystem::path entry_path : mods)
-        {
-            console::debug_if("Shimakaze", std::format("Reading item at \"{}\"", entry_path.string()).c_str(), show_debug);
-
-            if (std::filesystem::is_directory(entry_path))
+            if (std::filesystem::is_directory(mod_path))
             {
-                // this is a mod directory
-                // get the mod's toml configuration
-                const std::filesystem::path toml_path = entry_path / "mod.toml";
+                // mod directory
+                const auto config_path = mod_path / "mod.toml";
 
                 // update progress text
-                shimakaze::loading::update_progress_text(std::format("Initializing: Reading configuration for possible mod \"{}\"...", entry_path.filename().string()).c_str());
+                shimakaze::loading::update_progress_text(std::format("Initializing: Reading configuration for possible mod \"{}\"...", mod_path.filename().string()).c_str());
 
                 // parse it as a toml file
-                toml::table mod_config = handler::read_mod_config_file(toml_path);
+                toml::table mod_config = handler::read_mod_config_file(config_path);
 
                 std::optional<std::string> mod_id = mod_config["mod"]["mod_id"].value<std::string>();
                 std::optional<std::string> mod_name = mod_config["mod"]["info"]["display_name"].value<std::string>();
@@ -178,302 +176,177 @@ namespace shimakaze::core::handler
                     continue;
                 }
 
-                // read mod dependencies
-                auto mod_dependencies = mod_config["mod"]["dependencies"];
+                // todo: validate mod path exists
 
-                if (mod_dependencies.is_array())
+                // valid mod path, all it really needs is a valid config, a valid id, and a valid main file
+                valid_mod_paths.insert(
+                    std::make_pair(
+                        *mod_id,
+                        std::make_tuple(
+                            mod_path,
+                            mod_config)));
+            }
+        }
+
+        // run all the valid mods
+        run_mod_dependencies(isolate, valid_mod_paths, {});
+    }
+
+    bool run_mod_dependencies(v8::Isolate *isolate, std::map<std::string, std::tuple<std::filesystem::path, toml::table>> mod_paths, std::vector<std::string> dependency_names)
+    {
+        bool show_debug = g_config["main"]["show_debug"].ref<bool>();
+
+        if (dependency_names.size() > 0)
+        {
+            std::cout << "wew" << std::endl;
+            // prioritize dependency loading
+            for (const auto &id : dependency_names)
+            {
+                std::cout << id << std::endl;
+                if (mod_paths.find(id) != mod_paths.end())
                 {
-                    toml::array deps = mod_dependencies.ref<toml::array>();
-                    bool unmet_dependencies = false;
-                    bool cancel_loading = false;
+                    // this dependency exists
+                    const auto mod_path = std::get<0>(mod_paths[id]);
+                    const auto mod_config = std::get<1>(mod_paths[id]);
 
-                    for (auto &element : deps)
+                    bool result = run_mod(isolate, mod_paths, id, mod_config, mod_path);
+
+                    if (result == false)
                     {
-                        if (element.is_string())
-                        {
-                            // this is a string, read over it
-                            std::string mod_dependency = element.ref<std::string>();
-                            std::string mod_idref = *mod_id;
-
-                            if (g_mod_map.count(mod_dependency.c_str()) == 0)
-                            {
-                                console::debug_if("Shimakaze", std::format("The mod {} has a dependency on the mod {} which is not loaded.", mod_idref, mod_dependency).c_str(), show_debug);
-
-                                unmet_dependencies = true;
-                            }
-
-                            if (mods.size() == 1 && unmet_dependencies == true)
-                            {
-                                // this is the last remaining mod
-                                if (g_mod_map.count(mod_dependency.c_str()) == 0)
-                                {
-                                }
-                                // it's now safe to assume that this dependency is never getting loaded
-                                console::debug_if("Shimakaze", "This is the last remaining mod, so it will not be put back into the loop. Ignoring it altogether.", show_debug);
-
-                                unmet_dependencies = false;
-                                cancel_loading = true;
-                                break;
-                            }
-
-                            console::debug_if("Shimakaze", "Pushing it back into the loop", show_debug);
-                        }
+                        // mod failed to load
+                        return false;
                     }
-
-                    if (unmet_dependencies)
-                    {
-                        // continue
-                        remaining_mods_files.push_back(entry_path);
-                        continue;
-                    }
-
-                    if (cancel_loading)
-                    {
-                        shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
-                        continue;
-                    }
-                }
-
-                // RESOURCE FOLDER HANDLING
-                std::optional<std::string> resource_folder = mod_config["mod"]["resource_folder"].value<std::string>();
-                console::debug_if("Shimakaze", std::format("Attempting to find if mod \"{}\" has a valid resource folder...", *mod_id).c_str(), show_debug);
-
-                if (resource_folder)
-                {
-                    // convert the folder to a path
-                    std::filesystem::path resource_folder_path = entry_path / std::filesystem::path(*resource_folder);
-                    console::debug_if("Shimakaze", std::format("Resource folder found.", *mod_id).c_str(), show_debug);
-
-                    // validate the folder even exists
-                    if (!std::filesystem::exists(resource_folder_path))
-                    {
-                        console::debug_if("Shimakaze", "The mod provided a resource folder name, but the folder itself didn't exist.", show_debug);
-                        shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
-                        continue;
-                    }
-                    else
-                    {
-                        // attempt to load resources
-                        shimakaze::loading::update_progress_text(std::format("Initializing: Checking resources for mod \"{}\"...", *mod_id).c_str());
-                        console::debug_if("Shimakaze", std::format("Reading over resources folder for mod \"{}\"...", *mod_id).c_str(), show_debug);
-
-                        std::vector<std::filesystem::path> resources_plist;
-                        std::vector<std::filesystem::path> resources_png;
-                        std::vector<std::string> loaded_resources;
-
-                        bool icon_loaded = false;
-                        std::optional<std::string> mod_icon = mod_config["mod"]["info"]["icon"].value<std::string>();
-
-                        for (const auto &entry : std::filesystem::directory_iterator(resource_folder_path))
-                        {
-                            auto loadedit = std::find(loaded_resources.begin(), loaded_resources.end(), entry.path().stem().string());
-                            if (!entry.path().has_stem() || loadedit != loaded_resources.end())
-                            {
-                                // unknown
-                                continue;
-                            }
-
-                            // ignore icons
-                            if (!icon_loaded && mod_icon)
-                            {
-                                if (entry.path().filename() == std::filesystem::path(*mod_icon))
-                                {
-                                    console::debug_if("Shimakaze", std::format("Icon for mod \"{}\" was found. Moving to temp directory...", *mod_id).c_str(), show_debug);
-                                    // set icon as loaded
-                                    icon_loaded = true;
-
-                                    // move icon to temp images folder
-                                    std::filesystem::path icon_path = shimakaze_temp_images_path / std::filesystem::path(std::format("{}-icon.png", *mod_id));
-                                    std::ifstream source(entry.path(), std::ios::binary);
-                                    std::ofstream dest(icon_path, std::ios::binary);
-
-                                    dest << source.rdbuf();
-
-                                    // close streams
-                                    source.close();
-                                    dest.close();
-
-                                    // get texture cache
-                                    auto texture_cache = CCTextureCache::sharedTextureCache();
-
-                                    // load icon
-                                    texture_cache->addImage(icon_path.string().c_str(), false);
-
-                                    continue;
-                                }
-                            }
-
-                            if (entry.path().extension() == ".plist")
-                            {
-                                // plist file
-                                auto it = std::find(resources_png.begin(), resources_png.end(), entry.path().stem());
-                                if (it != resources_png.end())
-                                {
-                                    // add to loaded resources
-                                    loaded_resources.push_back(entry.path().stem().string());
-
-                                    // remove png from list
-                                    std::erase(resources_png, *it);
-                                }
-                                else
-                                {
-                                    // add to resources plist
-                                    resources_plist.push_back(entry.path().stem());
-                                }
-                            }
-                            else if (entry.path().extension() == ".png")
-                            {
-                                // png file
-                                auto it = std::find(resources_plist.begin(), resources_plist.end(), entry.path().stem());
-                                if (it != resources_plist.end())
-                                {
-                                    // add to loaded_resources
-                                    loaded_resources.push_back(entry.path().stem().string());
-
-                                    // remove png from list
-                                    std::erase(resources_plist, *it);
-                                }
-                                else
-                                {
-                                    // add to resources png
-                                    resources_png.push_back(entry.path().stem());
-                                }
-                            }
-                        }
-
-                        // don't uselessly clog the file cache vector
-                        bool setSearch = false;
-                        if (loaded_resources.size() > 0)
-                        {
-                            // add file path to CCFileUtils
-                            CCFileUtils *fileUtils = CCFileUtils::sharedFileUtils();
-                            std::vector<std::string> searchPaths = fileUtils->getSearchPaths();
-                            searchPaths.insert(searchPaths.begin(), resource_folder_path.string());
-                            fileUtils->setSearchPaths(searchPaths);
-
-                            // this is true now
-                            setSearch = true;
-
-                            // loading all possible resources
-                            for (const auto &resource : loaded_resources)
-                            {
-                                shimakaze::loading::update_progress_text(std::format("Initializing: Loading resource \"{}\" for mod \"{}\"...", resource, *mod_id).c_str());
-
-                                // load the resource
-                                handler::load_resource(
-                                    resource_folder_path,
-                                    std::make_tuple<std::filesystem::path, std::filesystem::path>(
-                                        resource_folder_path / std::filesystem::path(resource + ".plist"),
-                                        resource_folder_path / std::filesystem::path(resource + ".png")),
-                                    false);
-                            }
-                        }
-
-                        // load pngs
-                        if (resources_png.size() > 0)
-                        {
-                            if (setSearch == false)
-                            {
-                                // add file path to CCFileUtils
-                                // it didn't before
-                                CCFileUtils *fileUtils = CCFileUtils::sharedFileUtils();
-                                std::vector<std::string> searchPaths = fileUtils->getSearchPaths();
-                                searchPaths.insert(searchPaths.begin(), resource_folder_path.string());
-                                fileUtils->setSearchPaths(searchPaths);
-                            }
-
-                            // loading all possible images
-                            for (const auto &resource : loaded_resources)
-                            {
-                                shimakaze::loading::update_progress_text(std::format("Initializing: Loading resource \"{}\" for mod \"{}\"...", resource, *mod_id).c_str());
-
-                                // load the resource
-                                handler::load_resource(
-                                    resource_folder_path,
-                                    std::make_tuple<std::filesystem::path, std::filesystem::path>(
-                                        resource_folder_path / std::filesystem::path(resource + ".plist"),
-                                        resource_folder_path / std::filesystem::path(resource + ".png")),
-                                    true);
-                            }
-                        }
-                    }
-                }
-
-                /// MOD.TOML READING SECTION END
-                // attach the toml table to a vector
-                g_mod_info.push_back(mod_config);
-
-                if (mod_name)
-                {
-                    console::info("Shimakaze", std::format("Starting mod {}", *mod_name).c_str());
                 }
                 else
                 {
-                    console::info("Shimakaze", std::format("Starting mod {}", *mod_id).c_str());
+                    // ok well clearly this doesn't exist
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // always ran upon first load
+        // dependency vector is empty lmao
+        for (const auto &[id, mod_pair] : mod_paths)
+        {
+            // wait until context runner is done
+            while (scheduler::in_context_runner == true)
+            {
+                if (scheduler::in_context_runner == false)
+                {
+                    break;
                 }
 
-                loading_modIds.push_back(*mod_id);
-
-                // get the mod's main file path
-                std::string mod_file = mod_config["mod"]["main_file"].ref<std::string>();
-                std::filesystem::path mod_file_path = entry_path / std::filesystem::path(mod_file);
-
-                // get the file as a stream
-                std::ifstream mod_file_stream(mod_file_path);
-                std::stringstream mod_stream;
-                mod_stream << mod_file_stream.rdbuf();
-
-                // we can now start the mod :D
-                shimakaze::loading::update_progress_text(std::format("Initializing: Running \"{}\"...", *mod_id).c_str());
-                scheduler::run_under_context(isolate, mod_stream.str(), handler::run_mod_file);
+                // sleep
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
-            else if (std::filesystem::is_regular_file(entry_path))
-            {
-                // this is a .shm file
-                // TODO: load .shm files, and make a way of compiling them
-                // ignore it for now
-                continue;
-            }
-        }
 
-        if (shimakaze::core::g_mod_count == shimakaze::core::g_mod_loaded_count)
-        {
-            // its impossible for it to NOT be equal now
-            shimakaze::core::g_mod_count = g_mod_map.size();
+            const auto mod_path = std::get<0>(mod_pair);
+            const auto mod_config = std::get<1>(mod_pair);
 
-            // we can now start the game
-            shimakaze::scheduler::run_on_main_thread(shimakaze::loading::replace_to_menu_layer);
-        }
-
-        if (remaining_mods_files.size() > 0)
-        {
-            // we have some mods that have dependencies that are not loaded
-            // run the loop again with the remaining mods
-            run_mod_set(isolate, remaining_mods_files);
+            run_mod(isolate, mod_paths, id, mod_config, mod_path);
         }
     }
 
-    void load_resource(std::filesystem::path, std::tuple<std::filesystem::path, std::filesystem::path> resource, bool imageOnly)
+    bool run_mod(v8::Isolate *isolate, std::map<std::string, std::tuple<std::filesystem::path, toml::table>> mod_paths, std::string mod_id, toml::table mod_config, std::filesystem::path mod_path)
     {
-        // this is a very volatile function
-        // undoubtedly, this runs under the assumption that both a .plist and a .png file are present
-        // (sometimes)
-
-        // regardless, get the shared texture cache & sprite frame cache
-        auto texture_cache = CCTextureCache::sharedTextureCache();
-        auto sprite_frame_cache = CCSpriteFrameCache::sharedSpriteFrameCache();
-
-        if (imageOnly == true)
+        if (std::find(loading_modIds.begin(), loading_modIds.end(), mod_id) != loading_modIds.end())
         {
-            // add the png
-            texture_cache->addImage(std::get<0>(resource).string().c_str(), false);
+            // the mod is already checked
+            return true;
+        }
+        
+        // attempt to read mod dependencies
+        auto mod_dependencies_view = mod_config["mod"]["dependencies"];
 
-            // nothing else
-            return;
+        if (mod_dependencies_view.is_array())
+        {
+            toml::array mod_dependencies = mod_dependencies_view.ref<toml::array>();
+            // dependencies array
+            std::vector<std::string> dependencies;
+
+            // iterate over the array
+            for (const auto &dependency : mod_dependencies)
+            {
+                if (dependency.is_string())
+                {
+                    // get the string
+                    std::string dependency_string = dependency.ref<std::string>();
+                    // check if mod is already loaded
+                    auto mod_count = std::ranges::count(loaded_modIds.begin(), loaded_modIds.end(), dependency_string);
+
+                    if (mod_count > 0)
+                    {
+                        // mod with this id is loaded
+                        continue;
+                    }
+
+                    // add it to the vector
+                    dependencies.push_back(dependency.ref<std::string>());
+                }
+            }
+
+            if (dependencies.size() > 0)
+            {
+                // we have dependencies, so we need to wait for them to load
+                bool result = run_mod_dependencies(isolate, mod_paths, dependencies);
+
+                if (result == false)
+                {
+                    // something went wrong
+                    shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
+                    return false;
+                }
+            }
         }
 
-        // add the plist
-        sprite_frame_cache->addSpriteFramesWithFile(std::get<1>(resource).string().c_str());
+        // finally run the mod file
+        // attach the toml table to a vector
+        g_mod_info.push_back(mod_config);
+
+        std::optional<std::string> mod_name = mod_config["mod"]["info"]["display_name"].value<std::string>();
+
+        if (mod_name)
+        {
+            console::info("Shimakaze", std::format("Starting mod {}", *mod_name).c_str());
+        }
+        else
+        {
+            console::info("Shimakaze", std::format("Starting mod {}", mod_id).c_str());
+        }
+
+        loading_modIds.push_back(mod_id);
+
+        // get the mod's main file path
+        std::string mod_file = mod_config["mod"]["main_file"].ref<std::string>();
+        std::filesystem::path mod_file_path = mod_path / std::filesystem::path(mod_file);
+
+        // get the file as a stream
+        std::ifstream mod_file_stream(mod_file_path);
+        std::stringstream mod_stream;
+        mod_stream << mod_file_stream.rdbuf();
+
+        // we can now start the mod :D
+        shimakaze::loading::update_progress_text(std::format("Initializing: Running \"{}\"...", mod_id).c_str());
+        scheduler::run_under_context(isolate, mod_stream.str(), handler::run_mod_file);
+
+        // sleep for a bit to let the scheduler catch up
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        while (scheduler::in_context_runner == true)
+        {
+            if (scheduler::in_context_runner == false)
+            {
+                break;
+            }
+
+            // sleep
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        return true;
     }
 
     void run_mod_file(std::string mod_file, v8::Local<v8::Context> context)
@@ -559,7 +432,8 @@ namespace shimakaze::core::handler
                 v8::Maybe<bool> result = mod->InstantiateModule(context, module::static_call);
                 context->SetEmbedderData(0, mod_id);
 
-                if (mod_name) {
+                if (mod_name)
+                {
                     context->SetEmbedderData(0, bind::to_v8(isolate, *mod_name));
                 }
 

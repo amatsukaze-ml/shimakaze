@@ -9,6 +9,7 @@
 #include <map>
 #include <vector>
 #include <tuple>
+#include <deque>
 #include <filesystem>
 
 namespace shimakaze::core::handler
@@ -16,11 +17,14 @@ namespace shimakaze::core::handler
     inline std::map<std::string, ModEntry*> g_mod_map;
     inline std::map<std::string, COPYABLE_PERSISTENT<v8::Module>> g_libraries;
     inline std::map<std::string, toml::table> g_mod_config_map;
+    inline std::deque<std::string> g_mod_queue;
 
     toml::table read_mod_config_file(std::filesystem::path path);
 
+    bool run_mod(v8::Isolate* isolate, std::map<std::string, std::tuple<std::filesystem::path, toml::table>> mod_paths, std::string mod_id, toml::table mod_config, std::filesystem::path mod_path);
     void run_mod_file(std::string mod_file, v8::Local<v8::Context> context);
     void run_mod_set(v8::Isolate* isolate, std::vector<std::filesystem::path> mods);
+    bool run_mod_dependencies(v8::Isolate* isolate, std::map<std::string, std::tuple<std::filesystem::path, toml::table>> mod_paths, std::vector<std::string> dependency_names);
     void load_resource(std::filesystem::path, std::tuple<std::filesystem::path, std::filesystem::path> resource, bool imageOnly = false);
     void log_exception(v8::Isolate *isolate, v8::TryCatch *try_catch);
 
