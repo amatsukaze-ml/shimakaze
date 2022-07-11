@@ -25,6 +25,7 @@ namespace shimakaze::core::handler
     void run_mod_file(std::string mod_file, v8::Local<v8::Context> context);
     void run_mod_set(v8::Isolate* isolate, std::vector<std::filesystem::path> mods);
     bool run_mod_dependencies(v8::Isolate* isolate, std::map<std::string, std::tuple<std::filesystem::path, toml::table>> mod_paths, std::vector<std::string> dependency_names);
+    void run_mod_resources(std::filesystem::path entry_path, toml::table mod_config);
     void load_resource(std::filesystem::path, std::tuple<std::filesystem::path, std::filesystem::path> resource, bool imageOnly = false);
     void log_exception(v8::Isolate *isolate, v8::TryCatch *try_catch);
 

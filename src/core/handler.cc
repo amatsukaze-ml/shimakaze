@@ -257,7 +257,7 @@ namespace shimakaze::core::handler
             // the mod is already checked
             return true;
         }
-        
+
         // attempt to read mod dependencies
         auto mod_dependencies_view = mod_config["mod"]["dependencies"];
 
@@ -305,7 +305,6 @@ namespace shimakaze::core::handler
         // finally run the mod file
         // attach the toml table to a vector
         g_mod_info.push_back(mod_config);
-
         std::optional<std::string> mod_name = mod_config["mod"]["info"]["display_name"].value<std::string>();
 
         if (mod_name)
@@ -316,6 +315,8 @@ namespace shimakaze::core::handler
         {
             console::info("Shimakaze", std::format("Starting mod {}", mod_id).c_str());
         }
+
+        run_mod_resources(mod_path, mod_config);
 
         loading_modIds.push_back(mod_id);
 
@@ -514,6 +515,199 @@ namespace shimakaze::core::handler
         }
 
         /// MODLOADER RUN FILE LOGIC END
+    }
+
+    void run_mod_resources(std::filesystem::path entry_path, toml::table mod_config) {
+        toml::table *shimakaze_main = g_config["main"].as_table();
+        bool show_debug = shimakaze_main->get("show_debug")->value_or(true);
+
+        std::optional<std::string> mod_id = mod_config["mod"]["mod_id"].value<std::string>();
+        std::optional<std::string> resource_folder = mod_config["mod"]["resource_folder"].value<std::string>();
+
+        console::debug_if("Shimakaze", std::format("Attempting to find if mod \"{}\" has a valid resource folder...", *mod_id).c_str(), show_debug);
+
+        if (resource_folder) {
+            // convert the folder to a path
+            std::filesystem::path resource_folder_path = entry_path / std::filesystem::path(*resource_folder);
+            console::debug_if("Shimakaze", std::format("Resource folder found.", *mod_id).c_str(), show_debug);
+
+            // validate the folder even exists
+            if (!std::filesystem::exists(resource_folder_path))
+            {
+                console::debug_if("Shimakaze", "The mod provided a resource folder name, but the folder itself didn't exist.", show_debug);
+                shimakaze::core::g_mod_count = shimakaze::core::g_mod_count - 1;
+                return;
+            }
+            else
+            {
+                // attempt to load resources
+                shimakaze::loading::update_progress_text(std::format("Initializing: Checking resources for mod \"{}\"...", *mod_id).c_str());
+                console::debug_if("Shimakaze", std::format("Reading over resources folder for mod \"{}\"...", *mod_id).c_str(), show_debug);
+
+                std::vector<std::filesystem::path> resources_plist;
+                std::vector<std::filesystem::path> resources_png;
+                std::vector<std::string> loaded_resources;
+
+                bool icon_loaded = false;
+                std::optional<std::string> mod_icon = mod_config["mod"]["info"]["icon"].value<std::string>();
+
+                for (const auto &entry : std::filesystem::directory_iterator(resource_folder_path))
+                {
+                    auto loadedit = std::find(loaded_resources.begin(), loaded_resources.end(), entry.path().stem().string());
+                    if (!entry.path().has_stem() || loadedit != loaded_resources.end())
+                    {
+                        // unknown
+                        continue;
+                    }
+
+                    // ignore icons
+                    if (!icon_loaded && mod_icon)
+                    {
+                        if (entry.path().filename() == std::filesystem::path(*mod_icon))
+                        {
+                            console::debug_if("Shimakaze", std::format("Icon for mod \"{}\" was found. Moving to temp directory...", *mod_id).c_str(), show_debug);
+                            // set icon as loaded
+                            icon_loaded = true;
+
+                            // move icon to temp images folder
+                            std::filesystem::path icon_path = shimakaze_temp_images_path / std::filesystem::path(std::format("{}-icon.png", *mod_id));
+                            std::ifstream source(entry.path(), std::ios::binary);
+                            std::ofstream dest(icon_path, std::ios::binary);
+
+                            dest << source.rdbuf();
+
+                            // close streams
+                            source.close();
+                            dest.close();
+
+                            // get texture cache
+                            auto texture_cache = CCTextureCache::sharedTextureCache();
+
+                            // load icon
+                            texture_cache->addImage(icon_path.string().c_str(), false);
+
+                            continue;
+                        }
+                    }
+
+                    if (entry.path().extension() == ".plist")
+                    {
+                        // plist file
+                        auto it = std::find(resources_png.begin(), resources_png.end(), entry.path().stem());
+                        if (it != resources_png.end())
+                        {
+                            // add to loaded resources
+                            loaded_resources.push_back(entry.path().stem().string());
+
+                            // remove png from list
+                            std::erase(resources_png, *it);
+                        }
+                        else
+                        {
+                            // add to resources plist
+                            resources_plist.push_back(entry.path().stem());
+                        }
+                    }
+                    else if (entry.path().extension() == ".png")
+                    {
+                        // png file
+                        auto it = std::find(resources_plist.begin(), resources_plist.end(), entry.path().stem());
+                        if (it != resources_plist.end())
+                        {
+                            // add to loaded_resources
+                            loaded_resources.push_back(entry.path().stem().string());
+
+                            // remove png from list
+                            std::erase(resources_plist, *it);
+                        }
+                        else
+                        {
+                            // add to resources png
+                            resources_png.push_back(entry.path().stem());
+                        }
+                    }
+                }
+
+                // don't uselessly clog the file cache vector
+                bool setSearch = false;
+                if (loaded_resources.size() > 0)
+                {
+                    // add file path to CCFileUtils
+                    CCFileUtils *fileUtils = CCFileUtils::sharedFileUtils();
+                    std::vector<std::string> searchPaths = fileUtils->getSearchPaths();
+                    searchPaths.insert(searchPaths.begin(), resource_folder_path.string());
+                    fileUtils->setSearchPaths(searchPaths);
+
+                    // this is true now
+                    setSearch = true;
+
+                    // loading all possible resources
+                    for (const auto &resource : loaded_resources)
+                    {
+                        shimakaze::loading::update_progress_text(std::format("Initializing: Loading resource \"{}\" for mod \"{}\"...", resource, *mod_id).c_str());
+
+                        // load the resource
+                        handler::load_resource(
+                                resource_folder_path,
+                                std::make_tuple<std::filesystem::path, std::filesystem::path>(
+                                        resource_folder_path / std::filesystem::path(resource + ".plist"),
+                                        resource_folder_path / std::filesystem::path(resource + ".png")),
+                                false);
+                    }
+                }
+
+                // load pngs
+                if (resources_png.size() > 0)
+                {
+                    if (setSearch == false)
+                    {
+                        // add file path to CCFileUtils
+                        // it didn't before
+                        CCFileUtils *fileUtils = CCFileUtils::sharedFileUtils();
+                        std::vector<std::string> searchPaths = fileUtils->getSearchPaths();
+                        searchPaths.insert(searchPaths.begin(), resource_folder_path.string());
+                        fileUtils->setSearchPaths(searchPaths);
+                    }
+
+                    // loading all possible images
+                    for (const auto &resource : loaded_resources)
+                    {
+                        shimakaze::loading::update_progress_text(std::format("Initializing: Loading resource \"{}\" for mod \"{}\"...", resource, *mod_id).c_str());
+
+                        // load the resource
+                        handler::load_resource(
+                                resource_folder_path,
+                                std::make_tuple<std::filesystem::path, std::filesystem::path>(
+                                        resource_folder_path / std::filesystem::path(resource + ".plist"),
+                                        resource_folder_path / std::filesystem::path(resource + ".png")),
+                                true);
+                    }
+                }
+            }
+        }
+    }
+
+    void load_resource(std::filesystem::path, std::tuple<std::filesystem::path, std::filesystem::path> resource, bool imageOnly)
+    {
+        // this is a very volatile function
+        // undoubtedly, this runs under the assumption that both a .plist and a .png file are present
+        // (sometimes)
+
+        // regardless, get the shared texture cache & sprite frame cache
+        auto texture_cache = CCTextureCache::sharedTextureCache();
+        auto sprite_frame_cache = CCSpriteFrameCache::sharedSpriteFrameCache();
+
+        if (imageOnly == true)
+        {
+            // add the png
+            texture_cache->addImage(std::get<0>(resource).string().c_str(), false);
+
+            // nothing else
+            return;
+        }
+
+        // add the plist
+        sprite_frame_cache->addSpriteFramesWithFile(std::get<1>(resource).string().c_str());
     }
 
     void add_mod(v8::Isolate *isolate, toml::table mod_config, v8::Local<v8::Module> result)
